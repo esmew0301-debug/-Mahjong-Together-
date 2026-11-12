@@ -1,0 +1,93 @@
+import type { RuleEntry } from "../types";
+import { SRC } from "../../variants";
+
+const R = "hk-traditional";
+const S = SRC.cantonese;
+
+export const CANTONESE: RuleEntry[] = [
+  {
+    id: "hk-overview", variant: "cantonese", ruleset: R, topic: "Cantonese / Hong Kong Mahjong", ruleType: "info",
+    examples: ["What is Cantonese Mahjong?"],
+    keywords: ["~cantonese", "~hong kong", "~cantonese mahjong", "~hong kong mahjong", "rules overview", "basic rules", "how to play", "background", "culture"],
+    synonyms: ["~广东麻将", "~香港麻将", "~港式麻将"],
+    short: "Hong Kong (Cantonese) Mahjong is a traditional style from Hong Kong and Guangdong, popular in many overseas Chinese communities. It uses all 144 tiles including flowers, allows chow, pung, and kong, and values hands in faan.",
+    simple: "Classic Mahjong with every tile, flower bonuses, and a minimum hand value to win.",
+    detail: "• 144 tiles incl. winds, dragons, flowers, seasons\n• Flowers and seasons are bonus tiles\n• Chow (from your left), pung, kong\n• Faan scoring with an agreed minimum\n• No tile exchange, no missing suit",
+    stages: ["hk-review"], source: S,
+  },
+  {
+    id: "hk-tiles", variant: "cantonese", ruleset: R, topic: "Hong Kong tiles", ruleType: "mandatory",
+    examples: ["How many tiles are used?"],
+    keywords: ["how many tiles", "number of tiles", "144", "which tiles", "remove", "winds", "dragons", "jokers"],
+    synonyms: ["多少张", "几张牌"],
+    short: "Hong Kong Mahjong uses 144 tiles: the three suits (108), Winds (16), Dragons (12), four Flowers, and four Seasons. Keep the winds and dragons; remove only jokers if your set has them.",
+    simple: "Use the whole Chinese set — 144 tiles — minus any jokers.",
+    example: "A standard Chinese set already has 144 tiles, so you usually don't remove anything except jokers.",
+    detail: "• Suits: 108\n• Winds: 16, Dragons: 12\n• Flowers 4 + Seasons 4\nTotal: 144.",
+    stages: ["hk-tiles"], source: S,
+  },
+  {
+    id: "hk-flowers", variant: "cantonese", ruleset: R, topic: "Flowers and seasons", ruleType: "mandatory",
+    examples: ["How do flower tiles work?"],
+    keywords: ["flower", "flowers", "flower tiles", "season", "seasons", "bonus tile", "replacement", "replace"],
+    synonyms: ["花牌", "补花"],
+    short: "Flowers and seasons are bonus tiles, not part of your hand. When you have one, place it face up in front of you and draw a replacement from the end of the wall. They can add faan to a winning hand.",
+    simple: "If you get a flower, put it aside and take another tile.",
+    example: "After the deal you hold Flower 2 and Spring. Set both face up and draw two replacement tiles from the end of the wall. If a replacement is another flower, repeat.",
+    detail: "• After the deal, starting with the dealer, set bonus tiles face up and draw replacements from the end of the wall until no one holds one.\n• During play, do the same whenever you draw a bonus tile.\n• A flower or season matching your seat can add faan, depending on your scoring table.",
+    stages: ["hk-deal"], source: S,
+  },
+  {
+    id: "hk-faan", variant: "cantonese", ruleset: R, topic: "Faan", ruleType: "house rule",
+    examples: ["What is Faan?", "What is the minimum to win?"],
+    keywords: ["faan", "fan", "minimum", "chicken hand", "score", "scoring", "points", "hand value"],
+    synonyms: ["番", "起糊", "鸡糊"],
+    short: "Faan are the units used to value a Hong Kong hand. Traditional rules require at least 3 faan to win, but tables often agree on a lower minimum or allow a 'chicken hand' with no faan. Your group chose its minimum during setup.",
+    simple: "Faan are points for special features of your hand; you need enough of them to be allowed to win.",
+    example: "An all-pungs hand, a dragon pung, or a matching flower each add faan. With a 3-faan minimum, a plain hand with only one faan can't win.",
+    detail: "HK Mahjong Rules: winning hands must be worth at least 3 faan under traditional rules; some tables allow a chicken hand. Point tables vary, so this app doesn't calculate faan.",
+    stages: ["hk-minfaan"], source: S,
+  },
+  {
+    id: "hk-calls", variant: "cantonese", ruleset: R, topic: "Chow, pung, and kong", ruleType: "mandatory",
+    examples: ["Can I Chow?"],
+    keywords: ["chow", "chi", "pung", "pong", "kong", "claim", "call", "take a discard", "sequence"],
+    synonyms: ["吃牌", "吃", "碰", "杠"],
+    short: "Yes — in Hong Kong Mahjong you can chow, but only on a discard from the player to your left. Pung and kong can be claimed from anyone.",
+    simple: "Runs only from your left neighbor; three or four of a kind from anyone.",
+    example: "Your left neighbor discards 7 Bamboo and you hold 8 and 9 Bamboo: you can chow. If the player across discards it, you can't chow.",
+    detail: "• Chow: sequence, from the player on your left only.\n• Pung: from any player.\n• Kong: from any player or concealed; draw a replacement from the end of the wall.",
+    stages: ["hk-review"], source: S,
+  },
+  {
+    id: "hk-winning", variant: "cantonese", ruleset: R, topic: "Winning a hand", ruleType: "mandatory",
+    examples: ["How do I win?"],
+    keywords: ["how do i win", "how to win", "winning hand", "win", "complete hand", "four sets", "pair"],
+    synonyms: ["胡牌", "食糊"],
+    short: "A winning hand is four sets plus a pair that's worth at least your table's minimum faan. You can win on a discard or by self-draw.",
+    detail: "Standard shape: four sets (chow, pung, or kong) plus a pair. Special hands exist on most faan tables. Check the minimum your group agreed on.",
+    stages: ["hk-review"], source: S,
+  },
+  {
+    id: "hk-setup", variant: "cantonese", ruleset: R, topic: "Hong Kong setup", ruleType: "mandatory",
+    examples: ["How do we choose the dealer?", "Who starts first?"],
+    keywords: ["dealer", "who starts", "who goes first", "starts first", "east", "wall", "stacks", "dice", "break", "deal", "dealing", "each player get"],
+    synonyms: ["庄家", "砌牌", "发牌"],
+    short: "East is the dealer and discards first. This app uses the dice method (highest total is East); HK Mahjong Rules uses a wind-tile draw instead. Each player builds 18 stacks two high, and East gets 14 tiles, everyone else 13.",
+    facets: [
+      { id: "break", cues: ["break", "dice", "roll"], answer: "HK Mahjong Rules: the dealer rolls two dice and counts counter-clockwise from themselves as 1 to choose a wall, then counts the same number of stacks from that wall's right end and breaks there." },
+      { id: "choose", cues: ["choose", "pick", "decide", "determine"], answer: "Sources differ: Jiada's HK rules have each player roll two dice (highest is East); HK Mahjong Rules has each player draw a wind tile, and whoever draws East picks a seat. This app uses the dice method — agree as a group." },
+    ],
+    detail: "Wall: 18 stacks per player (144 tiles). Deal: four tiles at a time for three rounds, then the dealer takes two and the others one. Then replace flowers.",
+    stages: ["hk-dealer", "hk-wall", "hk-break", "hk-deal"], source: S,
+  },
+  {
+    id: "hk-not-sichuan", variant: "cantonese", ruleset: R, topic: "No exchange or missing suit", ruleType: "info",
+    examples: ["Do we need to exchange three tiles?", "Is Ding Que required?"],
+    keywords: ["exchange three tiles", "exchange", "three tiles", "swap", "ding que", "missing suit"],
+    synonyms: ["换三张", "定缺"],
+    short: "No. Exchange Three Tiles and Ding Que are Sichuan rules. Hong Kong Mahjong has neither — after the deal and flower replacement, East discards first.",
+    detail: "Hong Kong's special features are flowers and seasons, chow from the left, and faan scoring.",
+    source: S,
+  },
+];

@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #ffffff;
+  --color-surface: #f7f7f8;
+  --color-bubble: #f1f1f1;
+  --color-ink: #171717;
+  --color-muted: #6b6b6b;
+  --color-line: #e5e5e5;
+  --color-ok: #16866a;
+  --font-sans: var(--font-inter), Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@utility t-app { font-size: 20px; font-weight: 600; line-height: 28px; }
+@utility t-page { font-size: 18px; font-weight: 600; line-height: 26px; }
+@utility t-section { font-size: 16px; font-weight: 600; line-height: 24px; }
+@utility t-body { font-size: 16px; font-weight: 400; line-height: 25px; }
+@utility t-btn { font-size: 15px; font-weight: 500; line-height: 22px; }
+@utility t-sub { font-size: 14px; line-height: 21px; }
+@utility t-meta { font-size: 12px; line-height: 18px; }
+
+html, body { background: #ffffff; color: #171717; }
+body { -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+* { -webkit-tap-highlight-color: transparent; }
+textarea, input { font-size: 16px; }
+
+.app-col {
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: #ffffff;
+  position: relative;
+}
+@media (min-width: 640px) {
+  body { background: #f7f7f8; }
+  .app-col { border-left: 1px solid #e5e5e5; border-right: 1px solid #e5e5e5; }
+}
+.pb-safe { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }

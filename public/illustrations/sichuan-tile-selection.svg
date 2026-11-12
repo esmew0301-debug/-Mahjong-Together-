@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 500" width="360" height="500" role="img" aria-labelledby="t d">
+<title id="t">Sichuan tile preparation</title>
+<desc id="d">Keep 108 tiles: Characters (Wan), Bamboo (Tiao), and Dots (Tong), numbered 1 to 9, four of each. Remove East, South, West, North winds, Red, Green and White dragons, flowers and seasons, and jokers if present.</desc>
+<rect width="360" height="500" rx="12" fill="#FFFFFF"/>
+<circle cx="25" cy="26" r="9" fill="#16866A"/><path d="M21 26 l3 3 l5 -6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="42" y="31" font-size="15" font-weight="600" fill="#171717" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">KEEP — 108 TILES</text>
+<text x="344" y="31" text-anchor="end" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">1–9 × 4 each</text>
+<text x="16" y="72" font-size="14" font-weight="600" fill="#171717" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Characters 万</text><text x="16" y="89" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Wan · 36 tiles</text><g transform="translate(160,54)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="17" text-anchor="middle" font-size="12" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">一</text><text x="16" y="34" text-anchor="middle" font-size="13" fill="#8A3B33" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">万</text>
+  
+</g><g transform="translate(198,54)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="17" text-anchor="middle" font-size="12" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">五</text><text x="16" y="34" text-anchor="middle" font-size="13" fill="#8A3B33" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">万</text>
+  
+</g><text x="251" y="80" text-anchor="middle" font-size="16" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">…</text><g transform="translate(274,54)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="17" text-anchor="middle" font-size="12" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">九</text><text x="16" y="34" text-anchor="middle" font-size="13" fill="#8A3B33" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">万</text>
+  
+</g>
+<text x="16" y="134" font-size="14" font-weight="600" fill="#171717" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Bamboo 条</text><text x="16" y="151" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Tiao · 36 tiles</text><g transform="translate(160,116)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <line x1="16" y1="8" x2="16" y2="19" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="22" x2="16" y2="33" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/>
+  
+</g><g transform="translate(198,116)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <line x1="9" y1="7" x2="9" y2="19" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="7" x2="16" y2="19" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="23" y1="7" x2="23" y2="19" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="9" y1="23" x2="9" y2="35" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="23" x2="16" y2="35" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/>
+  
+</g><text x="251" y="142" text-anchor="middle" font-size="16" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">…</text><g transform="translate(274,116)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <line x1="9" y1="6" x2="9" y2="14" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="6" x2="16" y2="14" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="23" y1="6" x2="23" y2="14" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="9" y1="17" x2="9" y2="25" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="17" x2="16" y2="25" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="23" y1="17" x2="23" y2="25" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="9" y1="28" x2="9" y2="36" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="28" x2="16" y2="36" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/><line x1="23" y1="28" x2="23" y2="36" stroke="#2F5D50" stroke-width="3" stroke-linecap="round"/>
+  
+</g>
+<text x="16" y="196" font-size="14" font-weight="600" fill="#171717" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Dots 筒</text><text x="16" y="213" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Tong · 36 tiles</text><g transform="translate(160,178)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <circle cx="16" cy="21" r="8" fill="none" stroke="#2F5D50" stroke-width="1.6"/>
+  
+</g><g transform="translate(198,178)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <circle cx="9" cy="10" r="4.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="23" cy="10" r="4.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="16" cy="21" r="4.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="9" cy="32" r="4.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="23" cy="32" r="4.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/>
+  
+</g><text x="251" y="204" text-anchor="middle" font-size="16" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">…</text><g transform="translate(274,178)">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <circle cx="8" cy="9" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="16" cy="9" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="24" cy="9" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="8" cy="21" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="16" cy="21" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="24" cy="21" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="8" cy="33" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="16" cy="33" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/><circle cx="24" cy="33" r="3.2" fill="none" stroke="#2F5D50" stroke-width="1.6"/>
+  
+</g>
+<line x1="16" y1="240" x2="344" y2="240" stroke="#E5E5E5"/>
+<circle cx="25" cy="266" r="9" fill="#8E8E8E"/><path d="M21.5 262.5 l7 7 M28.5 262.5 l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/><text x="42" y="271" font-size="15" font-weight="600" fill="#171717" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">REMOVE</text>
+<text x="16" y="306" font-size="14" font-weight="600" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Winds</text><text x="16" y="323" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">E · S · W · N</text><g transform="translate(160,288)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="17" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">東</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g><g transform="translate(198,288)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="17" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">南</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g><g transform="translate(236,288)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="17" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">西</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g><g transform="translate(274,288)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="17" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">北</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g>
+<text x="16" y="362" font-size="14" font-weight="600" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Dragons</text><text x="16" y="379" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Red · Green · White</text><g transform="translate(160,344)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="17" fill="#8A3B33" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">中</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g><g transform="translate(198,344)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="17" fill="#2F5D50" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">發</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g><g transform="translate(236,344)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <rect x="7" y="8" width="18" height="25" rx="2" fill="none" stroke="#5B7083" stroke-width="1.6"/>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g>
+<text x="16" y="418" font-size="14" font-weight="600" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Flowers &amp; Seasons</text><text x="16" y="435" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">All bonus tiles</text><g transform="translate(160,400)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="15" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">梅</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g><g transform="translate(198,400)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="15" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">春</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g>
+<text x="16" y="474" font-size="14" font-weight="600" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Jokers</text><text x="16" y="491" font-size="12" fill="#6B6B6B" font-family="Inter, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">If your set has them</text><g transform="translate(160,456)" opacity="0.55">
+  <rect x="0.75" y="0.75" width="30.5" height="40.5" rx="4.5" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1.5"/>
+  <text x="16" y="27" text-anchor="middle" font-size="16" fill="#171717" font-family="'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif">J</text>
+  <line x1="4" y1="37" x2="28" y2="4" stroke="#6B6B6B" stroke-width="2" stroke-linecap="round"/>
+</g>
+</svg>
