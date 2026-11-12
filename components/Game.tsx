@@ -10,6 +10,8 @@ import { exhaustCalc, kongCalc, winCalc } from "@/lib/scoring/sichuan";
 import { Btn, Count, Panel, Sheet, Statuses, cx } from "./ui";
 import { Confetti, type ConfettiRef } from "./ui/confetti";
 import { ThemeToggle } from "./ui/theme-toggle";
+import { displayName } from "@/lib/names";
+import { BRAND_GREEN } from "@/lib/brand";
 
 type Act = (a: Record<string, unknown>) => void;
 const newIdem = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now());
@@ -34,7 +36,7 @@ export function useScores(r: PublicRoom) {
         kongs[a] = (kongs[a] || 0) + 1;
       }
     }
-    const handsPlayed = (r.hands || []).length;
+    const handsPlayed = (r.hands || []).filter((h) => h.endReason !== "finished").length; // completed hands only
     return { totals, wins, kongs, handsPlayed, committed };
   }, [r.ledger, r.events, r.hands, r.players]);
 }
@@ -47,7 +49,7 @@ export function describeEvent(r: PublicRoom, e: GameEvent) {
   const M: Record<string, string> = { self_draw: "self-draw (Zi Mo)", discard: "on a discard (Dian Pao)", kong_replacement: "kong replacement", robbing_kong: "robbing a kong" };
   const S: Record<string, string> = { standard: "standard hand", seven_pairs: "seven pairs", all_pungs: "all pungs", other: "other" };
   const K: Record<string, string> = { concealed: "Concealed kong", exposed: "Exposed kong", added: "Added kong" };
-  if (e.type === "win") return { title: `${n(e.actor)} — Win (Hu)`, sub: `${M[c.method || ""] || ""}${c.fromId ? ` from ${n(c.fromId)}` : ""} · ${S[c.structure || ""] || ""}` };
+  if (e.type === "win") return { title: `${n(e.actor)} — Win (Hu)`, who: `Winner: ${n(e.actor)}`, sub: `${M[c.method || ""] || ""}${c.fromId ? ` from ${n(c.fromId)}` : ""} · ${S[c.structure || ""] || ""}` };
   if (e.type === "kong") return { title: `${n(c.actorId)} — ${K[c.kind || ""] || "Kong"}`, sub: c.fromId ? `from ${n(c.fromId)}'s discard` : "" };
   if (e.type === "exhaust") return { title: "Wall exhausted", sub: "End-of-hand settlement" };
   if (e.type === "correction") return { title: "Correction", sub: c.reason || "" };
@@ -57,15 +59,15 @@ export function describeEvent(r: PublicRoom, e: GameEvent) {
 export const topicForEvent = (r: PublicRoom, e: GameEvent) =>
   r.variant !== "sichuan" ? null : e.type === "kong" ? "sc-kong" : e.type === "exhaust" ? "sc-wallend" : e.type === "win" ? "sc-scoring" : "sc-scoring";
 
-function TransferList({ r, transfers }: { r: PublicRoom; transfers: Transfer[] }) {
+function TransferList({ r, transfers, status }: { r: PublicRoom; transfers: Transfer[]; status?: "Pending" | "Verified" | "Preview" }) {
   const n = nameIn(r);
   if (!transfers.length) return <p className="t-sub text-muted">No points change.</p>;
   return (
     <ul className="flex flex-col gap-1">
       {transfers.map((t, i) => (
         <li key={i} className="t-sub flex items-center gap-2">
-          <span className="flex-1 min-w-0 truncate">{n(t.from)} → {n(t.to)}</span>
-          <span className="font-medium tabular-nums">{t.amount}</span>
+          <span className="flex-1 min-w-0 truncate">{n(t.from)} pays {n(t.to)}</span>
+          <span className="font-medium tabular-nums whitespace-nowrap">{t.amount} point{t.amount === 1 ? "" : "s"}{status ? <span className="t-meta text-muted font-normal"> · {status}</span> : null}</span>
         </li>
       ))}
     </ul>
@@ -144,20 +146,22 @@ export function EventCard({ r, me, e, act, busy, onExplain, onCorrect }: { r: Pu
   const disputed = Object.values(e.approvals).includes("dispute");
   const confirmed = r.players.filter((p) => e.approvals[p.id] === "confirm").length;
   const canEdit = e.type !== "win" || e.actor === me;
+  const reconciling = r.status === "reconciling";
   return (
     <section id={`event-${e.id}`} aria-label={`Verify: ${d.title}`} className={cx("border rounded-2xl bg-bg p-4 shadow-card flex flex-col gap-3", disputed ? "border-[#FF9F0A]" : "border-line")}>
       <div className="flex flex-col gap-0.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="t-meta text-muted">{e.voidProposed ? "Proposal to void" : "Needs verification"} · Hand {e.hand} · Version {e.rev}</span>
+          <span className="t-meta text-muted">{e.voidProposed ? (reconciling ? "Proposal to exclude" : "Proposal to void") : reconciling ? "Unfinished event" : "Pending verification"} · Hand {e.hand} · Version {e.rev}</span>
           <Count n={confirmed} label="confirmed" />
         </div>
         <div className="t-section">{d.title}</div>
+        {"who" in d && d.who && <p className="t-sub">{d.who as string}</p>}
         {d.sub && <p className="t-sub text-muted">{d.sub}</p>}
         {disputed && <p className="t-sub font-medium text-[#B25000] dark:text-[#FFB340]">Disputed — paused until corrected or everyone confirms.</p>}
       </div>
       <div className="rounded-[12px] bg-surface p-3 flex flex-col gap-2">
-        <div className="t-meta text-muted">Proposed points</div>
-        <TransferList r={r} transfers={e.transfers} />
+        <div className="t-meta text-muted">Proposed points · Pending verification</div>
+        <TransferList r={r} transfers={e.transfers} status="Pending" />
         <ul className="t-meta text-muted flex flex-col gap-0.5 pt-1 border-t border-line">
           {e.lines.map((l, i) => <li key={i}>{l}</li>)}
         </ul>
@@ -172,8 +176,11 @@ export function EventCard({ r, me, e, act, busy, onExplain, onCorrect }: { r: Pu
       )}
       <div className="grid grid-cols-1 gap-2">
         <Btn variant={mine === "confirm" ? "ok" : "primary"} disabled={busy || mine === "confirm"} onClick={() => act({ type: "event-respond", eventId: e.id, rev: e.rev, value: "confirm" })}>
-          {mine === "confirm" ? "You confirmed" : e.voidProposed ? "Confirm Voiding" : "Confirm Result"}
+          {mine === "confirm" ? "You confirmed" : e.voidProposed ? (reconciling ? "Agree to Exclude" : "Confirm Voiding") : reconciling ? "Complete Verification" : "Confirm Result"}
         </Btn>
+        {reconciling && !e.voidProposed && (
+          <Btn variant="secondary" disabled={busy} onClick={() => act({ type: "event-revise", eventId: e.id, rev: e.rev, void: true })}>Exclude From Final Scores</Btn>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <Btn variant={mine === "explain" ? "chosen" : "secondary"} className="px-2 text-[14px]" disabled={busy} onClick={() => { act({ type: "event-respond", eventId: e.id, rev: e.rev, value: "explain" }); onExplain(e); }}>Need Explanation</Btn>
           <Btn variant={mine === "dispute" ? "chosen" : "secondary"} className="px-2 text-[14px]" disabled={busy} onClick={() => setDisputing(!disputing)}>Dispute or Correct</Btn>
@@ -343,7 +350,7 @@ export function RecordEventSheet({ r, me, open, onClose, act, busy, initial, rev
                   { k: "lastTile", label: "Won on the last tile of the wall" },
                 ].map((x) => (
                   <label key={x.k} className={cx("flex items-center gap-3 min-h-11 t-sub", x.disabled && "opacity-45")}>
-                    <input type="checkbox" disabled={x.disabled} checked={!!claim[x.k]} onChange={(e) => set(x.k, e.target.checked)} className="h-5 w-5 accent-[#34C759]" />
+                    <input type="checkbox" disabled={x.disabled} checked={!!claim[x.k]} onChange={(e) => set(x.k, e.target.checked)} className="h-5 w-5 accent-[var(--brand)]" />
                     {x.label}
                   </label>
                 ))}
@@ -438,7 +445,7 @@ export function RecordEventSheet({ r, me, open, onClose, act, busy, initial, rev
             <>
               <input value={claim.reason || ""} onChange={(e) => set("reason", e.target.value)} maxLength={200} placeholder="Reason for the correction" className="h-11 px-3 rounded-xl border border-line bg-bg outline-none focus:border-green" />
               {(r.events || []).find((e) => e.id === (claim.corrects || corrects))?.type === "win" && (
-                <label className="flex items-center gap-3 min-h-11 t-sub"><input type="checkbox" className="h-5 w-5 accent-[#34C759]" checked={!!claim.invalidWin} onChange={(e) => { set("invalidWin", e.target.checked); if (e.target.checked) setRows([]); }} />The win itself was invalid</label>
+                <label className="flex items-center gap-3 min-h-11 t-sub"><input type="checkbox" className="h-5 w-5 accent-[var(--brand)]" checked={!!claim.invalidWin} onChange={(e) => { set("invalidWin", e.target.checked); if (e.target.checked) setRows([]); }} />The win itself was invalid</label>
               )}
               <p className="t-sub font-medium">Replacement transfers</p>
               <p className="t-meta text-muted">The original transfers are reversed in full, then these are recorded instead.</p>
@@ -458,7 +465,7 @@ function Preview({ r, calc }: { r: PublicRoom; calc: { transfers: Transfer[]; li
   return (
     <div className="rounded-[12px] bg-surface p-3 flex flex-col gap-2" aria-live="polite">
       <div className="t-meta text-muted">Preview (the server recalculates on submit)</div>
-      {calc.problems.length ? <ul className="t-sub text-[#B42318] dark:text-[#FF6961] flex flex-col gap-1">{calc.problems.map((p, i) => <li key={i}>{p}</li>)}</ul> : <TransferList r={r} transfers={calc.transfers} />}
+      {calc.problems.length ? <ul className="t-sub text-[#B42318] dark:text-[#FF6961] flex flex-col gap-1">{calc.problems.map((p, i) => <li key={i}>{p}</li>)}</ul> : <TransferList r={r} transfers={calc.transfers} status="Preview" />}
       <ul className="t-meta text-muted flex flex-col gap-0.5">{calc.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
       {calc.limitations && <p className="t-meta text-[#B25000] dark:text-[#FFB340]">{calc.limitations}</p>}
     </div>
@@ -481,7 +488,7 @@ export function Ledger({ r }: { r: PublicRoom }) {
             <button onClick={() => setOpenId(openId === e.id ? null : e.id)} aria-expanded={openId === e.id} className="w-full text-left flex items-start gap-2">
               <span className="flex-1 min-w-0">
                 <span className="block t-sub font-medium">{d.title}{e.status === "voided" ? " (voided)" : ""}{e.correctedBy ? " (corrected)" : ""}</span>
-                <span className="block t-meta text-muted">Hand {e.hand} · {entries.length ? entries.map((l) => `${n(l.from)}→${n(l.to)} ${l.amount}`).join(", ") : "no points"}</span>
+                <span className="block t-meta text-muted">Hand {e.hand} · {e.status === "voided" ? "Excluded / voided" : "Verified"} · {entries.length ? entries.map((l) => `${n(l.from)} → ${n(l.to)}: ${l.amount} pt${l.amount === 1 ? "" : "s"}`).join(", ") : "no points"}</span>
               </span>
               <ChevronDown size={16} className={cx("text-muted mt-1 shrink-0", openId === e.id && "rotate-180")} />
             </button>
@@ -579,7 +586,8 @@ export function SessionReviewPanel({ r, me, act, busy }: { r: PublicRoom; me: st
       <div className="flex flex-col gap-0.5">
         <Count n={Object.keys(f.resp).length} label="confirmed" />
         <div className="t-section">Review Final Scores</div>
-        <p className="t-sub text-muted">{handsPlayed + (r.hand && !r.hand.ended ? 1 : 0)} hand(s) · {profileFor(r.variant).name} · ledger version {r.ledgerVersion || 0}</p>
+        <p className="t-sub text-muted">{handsPlayed} hand(s) completed{r.hand && !r.hand.ended && (r.events || []).length ? ` · Hand ${r.hand.n} not completed` : ""} · {r.variant ? profileFor(r.variant).name : "no variant chosen"} · ledger version {r.ledgerVersion || 0}</p>
+        {r.endedEarly && <p className="t-sub">Ended early by group agreement.{(r.events || []).filter((e) => e.status === "voided").length ? ` ${(r.events || []).filter((e) => e.status === "voided").length} event(s) excluded or voided.` : ""}</p>}
       </div>
       <ul className="flex flex-col gap-1">
         {[...r.players].sort((a, b) => (totals[b.id] || 0) - (totals[a.id] || 0)).map((p) => (
@@ -597,6 +605,54 @@ export function SessionReviewPanel({ r, me, act, busy }: { r: PublicRoom; me: st
   );
 }
 
+// ---------- End game ----------
+export function EndProposalPanel({ r, me, act, busy }: { r: PublicRoom; me: string; act: Act; busy: boolean }) {
+  const pr = r.endProposal!;
+  const n = nameIn(r);
+  const mine = pr.votes[me];
+  const agreed = r.players.filter((p) => pr.votes[p.id] === "agree").length;
+  return (
+    <Panel label="End game requested">
+      <div className="flex flex-col gap-0.5">
+        <Count n={agreed} label="Agreed" />
+        <div className="t-section">End Game Requested</div>
+        <p className="t-sub text-muted">{n(pr.by)} would like to end this session. Everyone must agree.</p>
+      </div>
+      <Statuses players={r.players} value={(p) => pr.votes[p.id]} labels={{ agree: { text: "Agreed", ok: true }, wait: { text: "Needs more time" } }} />
+      <div className="grid grid-cols-1 gap-2">
+        <Btn variant={mine === "agree" ? "ok" : "primary"} disabled={busy || mine === "agree"} onClick={() => act({ type: "end-vote", proposalId: pr.id, value: "agree" })}>{mine === "agree" ? "You agreed" : "Agree"}</Btn>
+        <div className="grid grid-cols-2 gap-2">
+          <Btn variant="secondary" className="px-2" disabled={busy} onClick={() => act({ type: "end-vote", proposalId: pr.id, value: "keep" })}>Keep Playing</Btn>
+          <Btn variant={mine === "wait" ? "chosen" : "secondary"} className="px-2 text-[14px]" disabled={busy} onClick={() => act({ type: "end-vote", proposalId: pr.id, value: "wait" })}>Need More Time</Btn>
+        </div>
+      </div>
+      <p className="t-meta text-muted">If anyone chooses Keep Playing, the request is cancelled and the session continues unchanged. Offline players are waited for — silence is never counted as agreement.</p>
+    </Panel>
+  );
+}
+
+export function ReconcilePanel({ r, act, busy, openRecord }: { r: PublicRoom; act: Act; busy: boolean; openRecord: () => void }) {
+  const pending = (r.events || []).filter((e) => e.status === "pending");
+  return (
+    <Panel label="Review unfinished events">
+      <div>
+        <div className="t-section">Review Unfinished Events</div>
+        <p className="t-sub text-muted">
+          Play has stopped by group agreement. {pending.length
+            ? `For each unfinished event below, either Complete Verification (all four confirm) or agree to Exclude From Final Scores. Nothing is scored or deleted automatically.`
+            : "No events are waiting. Record a correction if needed, then return to the final score review."}
+        </p>
+      </div>
+      {!pending.length && (
+        <div className="grid grid-cols-2 gap-2">
+          <Btn variant="secondary" className="px-2 text-[14px]" onClick={openRecord}>Record a Correction</Btn>
+          <Btn className="px-2 text-[14px]" disabled={busy} onClick={() => act({ type: "final-review-start" })}>Review Final Scores</Btn>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 // ---------- Final results ----------
 let lastConfetti = { code: "", t: 0 };
 
@@ -604,7 +660,10 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
   const reduce = useReducedMotion();
   const { totals, wins, kongs, handsPlayed, committed } = useScores(r);
   const [showBreakdown, setShowBreakdown] = useState(false);
-  useEffect(() => window.scrollTo(0, 0), []);
+  // Braces matter: modern browsers return a Promise from window.scrollTo, and an effect must return only a cleanup function.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
   const confettiRef = useRef<ConfettiRef>(null);
   const globalOptions = useMemo(() => ({ resize: true, useWorker: true }), []);
   const ranked = [...r.players].sort((a, b) => (totals[b.id] || 0) - (totals[a.id] || 0));
@@ -615,10 +674,11 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
   const heightPct = (v: number) => (top === min ? 70 : 12 + ((v - min) / (top - min)) * 88);
   const bars = r.players.map((p) => p); // seat order on the podium
   const variant = variantById(r.variant);
+  const scored = (r.ledger || []).length > 0 && top !== min; // a genuine scored result with a real top score
   const topics = [...new Set(committed.flatMap((e) => (e.type === "kong" ? ["Kong payments"] : e.type === "win" ? ["Winning hands and payments"] : e.type === "exhaust" ? ["Wall exhaustion settlement"] : [])))];
 
   useEffect(() => {
-    if (reduce) return;
+    if (reduce || !scored) return; // no winner celebration for an unscored / all-zero session
     const now = Date.now();
     if (lastConfetti.code === r.code && now - lastConfetti.t < 4000) return; // StrictMode remount / rerender guard
     lastConfetti = { code: r.code, t: now };
@@ -627,10 +687,10 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
     for (let i = 0; i < 6; i++)
       timers.push(window.setTimeout(() => confettiRef.current?.fire({
         particleCount: 14, angle: 270, spread: 70, startVelocity: 4, gravity: 0.55, drift: (Math.random() - 0.5) * 0.6, ticks: 320, scalar: 0.9,
-        origin: { x: 0.1 + Math.random() * 0.8, y: -0.05 }, colors: ["#34C759", "#FFD60A", "#FF9F0A", "#0A84FF", "#FF2D55", "#AF52DE"],
+        origin: { x: 0.1 + Math.random() * 0.8, y: -0.05 }, colors: [BRAND_GREEN, "#FFD60A", "#FF9F0A", "#0A84FF", "#FF2D55", "#AF52DE"],
       }), start + i * 380));
     return () => timers.forEach(clearTimeout);
-  }, [r.code, reduce]);
+  }, [r.code, reduce, scored]);
 
   return (
     <div className="min-h-[100dvh] flex flex-col pt-safe relative">
@@ -638,14 +698,16 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
       <div className="h-14 px-4 flex items-center justify-between t-app">Mahjong Together<span className="-mr-2"><ThemeToggle /></span></div>
       <main className="flex-1 px-4 py-4 flex flex-col gap-6">
         <div>
-          <h1 className="t-app">Game Complete!</h1>
-          <p className="t-body text-muted">Final Results · {r.name}</p>
-          <p className="t-meta text-muted">{handsPlayed} hand{handsPlayed === 1 ? "" : "s"} · {variant?.name} · game points only</p>
+          <h1 className="t-app">{scored ? "Game Complete!" : "Session Ended"}</h1>
+          <p className="t-body text-muted">{scored ? "Final Results" : "No Scored Hands Completed"} · {r.name}</p>
+          <p className="t-meta text-muted">
+            {[r.endedEarly ? "Completed — Ended by Group Agreement" : null, `${handsPlayed} hand${handsPlayed === 1 ? "" : "s"}`, variant?.name, "game points only"].filter(Boolean).join(" · ")}
+          </p>
         </div>
-        <section aria-label="Winner podium" className="flex items-end justify-between gap-3 h-[220px] px-1 pt-8">
+        {scored && <section aria-label="Winner podium" className="flex items-end justify-between gap-3 h-[220px] px-1 pt-8">
           {bars.map((p, i) => {
             const v = totals[p.id] || 0;
-            const isTop = v === top;
+            const isTop = scored && v === top;
             return (
               <div key={p.id} className="flex-1 h-full flex flex-col items-center justify-end gap-1 min-w-0">
                 {isTop && (
@@ -663,17 +725,18 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
               </div>
             );
           })}
-        </section>
+        </section>}
         <ol className="flex flex-col divide-y divide-line -mt-2">
           {ranked.map((p) => (
             <li key={p.id} className="flex items-center gap-3 py-2 t-body">
-              <span className="w-7 t-sub text-muted">#{rankOf(p.id)}</span>
-              <span className="flex-1 min-w-0 truncate">{p.name}{p.id === me ? " (you)" : ""}{(totals[p.id] || 0) === top ? " 👑" : ""}</span>
+              <span className="w-7 t-sub text-muted">{scored ? `#${rankOf(p.id)}` : "–"}</span>
+              <span className="flex-1 min-w-0 truncate">{displayName(p.name)}{p.id === me ? " (you)" : ""}{scored && (totals[p.id] || 0) === top ? " 👑" : ""}</span>
               <span className="font-semibold tabular-nums">{signed(totals[p.id] || 0)}</span>
             </li>
           ))}
         </ol>
-        {ranked.filter((p) => (totals[p.id] || 0) === top).length > 1 && <p className="t-sub text-muted -mt-3">Tied for first place — no tie-breaker applied.</p>}
+        {scored && ranked.filter((p) => (totals[p.id] || 0) === top).length > 1 && <p className="t-sub text-muted -mt-3">Tied for first place — no tie-breaker applied.</p>}
+        {!scored && <p className="t-sub text-muted -mt-3">No points were confirmed, so there is no winner for this session.</p>}
         <section className="flex flex-col gap-2">
           <button onClick={() => setShowBreakdown(!showBreakdown)} aria-expanded={showBreakdown} className="flex items-center justify-between t-section min-h-11">Full Score Breakdown <ChevronDown size={18} className={cx("text-muted", showBreakdown && "rotate-180")} /></button>
           {showBreakdown && (

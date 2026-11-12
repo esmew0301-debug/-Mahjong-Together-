@@ -140,6 +140,7 @@ function endHand(r: Room, reason: "wins" | "exhausted") {
 function commit(r: Room, e: GameEvent) {
   if (e.voidProposed) {
     e.status = "voided";
+    if (r.status === "reconciling") e.notes.push({ by: "group", text: "Excluded from final scores by all four players", rev: e.rev, ts: Date.now() });
     e.committedAt = Date.now();
     push(r, msg({ sender: "system", text: `Voided by all four players: ${describe(r, e)}. No points changed.` }));
     return;
@@ -186,7 +187,7 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       if (events.some((e) => e.idem === idem)) return true; // retry of the same submission: no duplicate
       const inHand = r.status === "playing" && !hand.ended;
       if (type === "correction") {
-        if (r.status !== "playing" && r.status !== "hand_review") throw new HttpError(409, "Corrections can be made during play or hand review.");
+        if (!["playing", "hand_review", "reconciling"].includes(r.status)) throw new HttpError(409, "Corrections can be made during play, hand review, or final reconciliation.");
       } else if (!inHand) throw new HttpError(409, "No hand is in progress.");
       const claim = sanitizeClaim(type, (a.claim as Record<string, unknown>) || {}, pid);
       const actor = type === "win" ? pid : type === "kong" ? String(claim.actorId) : undefined;
@@ -207,7 +208,12 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       };
       events.push(e);
       if (type === "win")
-        push(r, msg({ sender: "ai", aiMode: "demo", title: `${me} Has Declared a Win!`, text: `Claim: ${describe(r, e).replace(`${me} — `, "")}.\n\nReveal and check the real tiles together, then each player confirms or disputes below. No points change until all four confirm.`, actions: [{ label: "Review Win", type: "focus", topicId: `event:${e.id}` }] }));
+        push(r, msg({
+          sender: "ai", aiMode: "demo", kind: "declaration", eventId: e.id,
+          title: `${me} declared a win!`,
+          text: `${claimSummary(claim)} · Awaiting Group Verification\n\nReveal and check the real tiles together, then each player confirms or disputes below. No points change until all four confirm.`,
+          actions: [{ label: "Review Win", type: "focus", topicId: `event:${e.id}` }, ...(r.variant === "sichuan" ? [{ label: "View Rule", type: "followup" as const, topicId: "sc-scoring", facet: "short" }] : [])],
+        }));
       else push(r, msg({ sender: "system", text: `${me} submitted for verification: ${describe(r, e)}.` }));
       return true;
     }
@@ -223,7 +229,10 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       if (note || v !== "confirm") e.notes.push({ by: pid, text: note || (v === "explain" ? "Needs an explanation" : "Disputes this result"), rev: e.rev, ts: Date.now() });
       if (v === "dispute") push(r, msg({ sender: "system", text: `${me} disputed: ${describe(r, e)}. The event is paused until it's corrected or everyone confirms.` }));
       if (v === "explain") push(r, msg({ sender: "system", text: `${me} asked for an explanation of: ${describe(r, e)}.` }));
-      if (ids(r).length === 4 && ids(r).every((id) => e.approvals[id] === "confirm")) commit(r, e);
+      if (ids(r).length === 4 && ids(r).every((id) => e.approvals[id] === "confirm")) {
+        commit(r, e);
+        maybeStartFinalReview(r);
+      }
       return true;
     }
     case "event-revise": {
@@ -281,7 +290,7 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       if (r.status !== "session_review" || !f) throw new HttpError(409, "There is no final score review.");
       if (Number(a.ledgerVersion) !== (r.ledgerVersion || 0) || f.ledgerVersion !== (r.ledgerVersion || 0)) throw new HttpError(409, "The scores changed. Review the latest version.");
       if (a.value === "correct") {
-        r.status = f.returnTo;
+        r.status = r.endedEarly ? "reconciling" : f.returnTo;
         r.finalReview = null;
         push(r, msg({ sender: "system", text: `${me} requested a correction. Use Record Event → Review or Correct Event, then the host can finish again.` }));
         return true;
@@ -294,6 +303,43 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       }
       return true;
     }
+    case "final-review-start": {
+      if (r.status !== "reconciling") throw new HttpError(409, "Not reconciling.");
+      if (!maybeStartFinalReview(r)) throw new HttpError(409, "Resolve the unfinished events first.");
+      return true;
+    }
+    case "end-propose": {
+      if (["lobby", "complete", "reconciling"].includes(r.status) || (r.status === "session_review" && r.endedEarly)) throw new HttpError(409, "The game can't be ended from here.");
+      if (r.players.length < 4) throw new HttpError(409, "All four players need to be in the room.");
+      if (r.endProposal) throw new HttpError(409, `${nameOf(r, r.endProposal.by)} has already asked to end the game. Vote on that request.`);
+      r.endProposal = { id: uid(), by: pid, votes: { [pid]: "agree" }, createdAt: Date.now(), fromStatus: r.status };
+      push(r, msg({ sender: "system", text: `${me} asked to end this session. Everyone must agree.` }));
+      return true;
+    }
+    case "end-vote": {
+      const pr = r.endProposal;
+      if (!pr || pr.id !== a.proposalId) throw new HttpError(409, "This end-game request is no longer active.");
+      const v = String(a.value);
+      if (!["agree", "keep", "wait"].includes(v)) throw new HttpError(400, "Invalid vote");
+      if (v === "keep") {
+        r.endProposal = null;
+        push(r, msg({ sender: "system", text: `${me} wants to keep playing. The game continues.` }));
+        return true;
+      }
+      pr.votes[pid] = v as "agree" | "wait";
+      if (ids(r).length === 4 && ids(r).every((id) => pr.votes[id] === "agree")) {
+        const handInProgress = !!r.hand && !r.hand.ended && r.status === "playing";
+        r.endedEarly = { at: Date.now(), fromStatus: pr.fromStatus, handInProgress };
+        r.endProposal = null;
+        r.check = null;
+        r.finalReview = null;
+        if (!r.hand) initGame(r);
+        r.status = "reconciling";
+        push(r, msg({ sender: "system", text: "All four players agreed to end the game. Play has stopped — now let's settle the scores." }));
+        maybeStartFinalReview(r);
+      }
+      return true;
+    }
     case "finish-cancel": {
       if (pid !== r.hostId || r.status !== "session_review" || !r.finalReview) throw new HttpError(409, "Nothing to cancel.");
       r.status = r.finalReview.returnTo;
@@ -303,6 +349,24 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
     }
   }
   return false;
+}
+
+/** In an early-ended session, move to final score review once no event is pending. */
+export function maybeStartFinalReview(r: Room): boolean {
+  if (r.status !== "reconciling") return false;
+  if ((r.events || []).some((e) => e.status === "pending")) return false;
+  r.finalReview = { ledgerVersion: r.ledgerVersion || 0, resp: {}, returnTo: "reconciling" };
+  r.status = "session_review";
+  return true;
+}
+
+const METHOD_SHORT: Record<string, string> = { self_draw: "Self-Draw", discard: "Discard Win", kong_replacement: "Kong Replacement", robbing_kong: "Robbing a Kong" };
+const STRUCT_SHORT: Record<string, string> = { standard: "Standard Hand", seven_pairs: "Seven Pairs", all_pungs: "All Pungs", other: "Other" };
+function claimSummary(c: Record<string, unknown>) {
+  const bits = [METHOD_SHORT[String(c.method)], STRUCT_SHORT[String(c.structure)]];
+  if (c.pureSuit) bits.push("Pure Suit");
+  if (Number(c.roots)) bits.push(`${c.roots} Root${Number(c.roots) > 1 ? "s" : ""}`);
+  return bits.filter(Boolean).join(" · ");
 }
 
 export function suggestion(r: Room): string | null {

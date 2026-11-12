@@ -3,6 +3,9 @@
 
 /* Theme tokens. Light is default; .dark on <html> switches (set before paint by an inline script). */
 :root {
+  /* Brand green — the ONE token for every green accent (same in light and dark). scripts/prepare-hero.py sets it from the tile photo. */
+  --brand: #357528;
+  --brand-text: var(--brand);   /* #357528 on white = 5.6:1 */
   --bg: #ffffff;
   --fg: #1c1c1e;
   --muted: #6e6e73;
@@ -34,6 +37,7 @@
   --disabled-text: #636366;
   --dash: #48484a;
   --overlay: rgba(0, 0, 0, 0.6);
+  --brand-text: color-mix(in srgb, var(--brand) 70%, white); /* green TEXT only, readable on black */
   color-scheme: dark;
 }
 
@@ -48,14 +52,14 @@
   --color-line: var(--line);
   --color-hover: var(--hover);
   --color-dash: var(--dash);
-  /* #34C759 is identical in both themes for my messages, buttons, active controls and checkmarks. */
-  --color-green: #34c759;
-  --color-green-strong: #34c759;
-  --color-green-hover: #2fb350;
-  --color-green-pressed: #28a745;
-  --color-green-text: #248a3d;
+  /* --brand (#357528, sampled from the 3D tile's green side) is identical in both themes for my messages, buttons, active controls and checkmarks. */
+  --color-green: var(--brand);
+  --color-green-strong: var(--brand);
+  --color-green-hover: color-mix(in srgb, var(--brand) 90%, black);
+  --color-green-pressed: color-mix(in srgb, var(--brand) 80%, black);
+  --color-green-text: var(--brand-text);
   --color-green-soft: var(--soft);
-  --color-ok: #34c759;
+  --color-ok: var(--brand);
   --color-disabled: var(--disabled);
   --color-disabled-text: var(--disabled-text);
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -66,7 +70,6 @@
   --shadow-sheet: 0 8px 24px rgba(0, 0, 0, 0.1);
   --font-sans: var(--font-inter), Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-.dark { --color-green-text: #34c759; }
 
 @utility t-app { font-size: 20px; font-weight: 600; line-height: 28px; }
 @utility t-page { font-size: 18px; font-weight: 600; line-height: 26px; }
@@ -78,7 +81,7 @@
 
 html, body { background: var(--bg); color: var(--fg); }
 button, a, input, textarea { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease; }
-:focus-visible:not(input):not(textarea) { outline: 2px solid #34c759; outline-offset: 2px; }
+:focus-visible:not(input):not(textarea) { outline: 2px solid var(--brand); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }

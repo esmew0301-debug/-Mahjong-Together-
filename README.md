@@ -35,6 +35,21 @@ It is not an online Mahjong game. Tiles, dice and play all stay physical.
 - **Final Results:** all four confirm the same ledger version, then a podium with rising bars and a crown appears, followed by gentle falling confetti that plays once (the supplied `components/ui/confetti.tsx`).
 - **Dark mode:** a per-device toggle, saved in localStorage and applied before first paint.
 
+## Tutorials, end game and homepage hero
+
+- **Tutorials:** all four variants follow the same teaching structure: what we're doing, why, numbered physical actions, a picture where tile identification or direction matters, Show Example, then separate checks for understanding and physical completion.
+  - **Riichi:** tile set, red fives (house rule), seat winds and counter-clockwise turns, wall, dice break, dead wall and Dora indicator, deal, calls, and winning (yaku, riichi, ron/tsumo, furiten).
+  - **Hong Kong:** all 144 tiles kept, dealer, seats, wall, break, deal, flower and season replacement, minimum-faan house rule, calls, and winning.
+  - **American:** tiles and racks, reading the card (never reproduced), East, wall, break, deal, each Charleston pass as its own step with its own diagram, optional second Charleston (any player can stop it), courtesy pass, then jokers, calling and winning.
+  - **Illustrations:** `node scripts/generate-illustrations.mjs` regenerates every SVG in `public/illustrations/`.
+- **End game:** any player can send `end game` (standalone, case-insensitive) in the Shared Table, or use Menu → End Game.
+  - After a confirmation, all four vote Agree, Keep Playing, or Need More Time. One Keep Playing cancels; offline players are waited for.
+  - On 4/4 agreement, play stops. Pending events must either be verified or excluded by the group. Then all four confirm the same final ledger.
+  - A session with no confirmed points shows "Session Ended · No Scored Hands Completed" with no winner, crown or confetti.
+- **Win declarations:** accepted declarations trigger a small, one-time confetti burst (keyed by event ID). It is not verification; no points change until all four confirm.
+- **Chat:** the chat keeps your reading position. When you've scrolled up, new messages show a single "↓ New Messages" pill instead of jumping.
+- **Homepage hero (needs the real photo):** run `python3 scripts/prepare-hero.py /path/to/fa-tile-photo.jpg`. It crops the supplied 3D 發 tile, removes the white background while keeping the tile's white face, samples the brand green from the tile's lit green side, and writes `public/hero/mahjong-fa-tile.png`, `lib/hero.ts`, `--brand` in `app/globals.css`, and `lib/brand.ts`. Check `scripts/hero-preview-*.png` afterwards. Until it runs, the homepage shows no hero and the green stays `#34C759`.
+
 ## Run locally
 
 ```bash

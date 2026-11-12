@@ -92,6 +92,8 @@ function currentStepReply(ctx: Ctx, facet: GenericFacet | null): Reply {
     return { text: "Right now your group is choosing a Mahjong variant. Everyone picks one below — all four need to choose the same variant to continue. Tap \"Rules & Cultural Background\" on any option to compare.", actions: [{ label: "Compare the Variants", type: "followup", topicId: "g-variants", facet: "short" }] };
   if (ctx.status === "hand_review")
     return { text: "This hand is finished. Check the hand summary, then everyone chooses who deals next to start the next hand — or the host can finish the session. Scores carry over between hands." };
+  if (ctx.status === "reconciling")
+    return { text: "Your group agreed to end the game, so play has stopped. Settle any unfinished events — complete their verification or agree to exclude them — then everyone reviews the final scores." };
   if (ctx.status === "session_review")
     return { text: "Your group is reviewing the final scores. Each player confirms the same final ledger, or requests a correction if something looks wrong." };
   if (!step)

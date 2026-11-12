@@ -8,3 +8,4 @@ next-env.d.ts
 .DS_Store
 .vercel
 .data
+scripts/hero-preview-*.png

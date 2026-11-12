@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Msg, RoomResponse } from "./types";
 import { looksLikeQuestion } from "./mahjong/assistant";
+import { displayName } from "./names";
+
+const withDisplayNames = <T extends { name: string }>(ps: T[]): T[] => ps.map((p) => ({ ...p, name: displayName(p.name) }));
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public config = false) {
@@ -30,6 +33,11 @@ export function rememberRoom(code: string) {
     localStorage.setItem("mt.lastRoom", code);
   } catch {}
 }
+export function forgetRoom(code?: string) {
+  try {
+    if (!code || localStorage.getItem("mt.lastRoom") === code) localStorage.removeItem("mt.lastRoom");
+  } catch {}
+}
 export function lastRoom(): string | null {
   try {
     return localStorage.getItem("mt.lastRoom");
@@ -52,7 +60,7 @@ export function useRoom(code: string) {
   const accept = useCallback((d: RoomResponse) => {
     if (d.room.v >= vRef.current) {
       vRef.current = d.room.v;
-      setData(d);
+      setData({ ...d, room: { ...d.room, players: withDisplayNames(d.room.players) } });
     }
   }, []);
 
@@ -65,7 +73,7 @@ export function useRoom(code: string) {
         failures.current = 0;
         setConn("live");
         if (!j.member) setNotMember(true);
-        else if (j.same) setData((d) => (d ? { ...d, room: { ...d.room, players: j.players } } : d));
+        else if (j.same) setData((d) => (d ? { ...d, room: { ...d.room, players: withDisplayNames(j.players) } } : d));
         else accept(j);
       } catch (e) {
         if (e instanceof ApiError && (e.status === 404 || e.config)) {

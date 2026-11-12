@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiError, lastRoom, rememberRoom } from "@/lib/client";
+import { api, ApiError, forgetRoom, lastRoom, rememberRoom } from "@/lib/client";
 import { Btn, Header } from "@/components/ui";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import Image from "next/image";
+import { HERO } from "@/lib/hero";
 
 export default function Home() {
   const router = useRouter();
@@ -15,7 +17,24 @@ export default function Home() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [recent, setRecent] = useState<string | null>(null);
-  useEffect(() => setRecent(lastRoom()), []);
+  // Show "Return to Room" only after the server confirms this device still has a seat in an active room.
+  useEffect(() => {
+    const code = lastRoom();
+    if (!code) return;
+    let cancelled = false;
+    api(`/api/rooms/${code}`)
+      .then((j) => {
+        if (cancelled) return;
+        if (j.member && j.room && j.room.status !== "complete") setRecent(j.room.code);
+        else forgetRoom(code);
+      })
+      .catch(() => {
+        if (!cancelled) forgetRoom(code);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const create = async () => {
     if (!name.trim()) return setErr("Please enter your name.");
@@ -77,15 +96,29 @@ export default function Home() {
   return (
     <div className="min-h-[100dvh] flex flex-col px-4 pt-safe pb-safe">
       <div className="h-14 flex items-center justify-between t-app">Mahjong Together<span className="-mr-2"><ThemeToggle /></span></div>
-      <div className="flex-1 flex flex-col justify-center pb-16">
-        <h1 className="text-[24px] leading-[32px] font-semibold">Learn Mahjong Together.</h1>
-        <p className="t-body text-muted mt-2">Your AI companion for learning new Mahjong traditions with friends.</p>
-      </div>
+      {HERO ? (
+        <>
+          {/* Intro moved up to make room for the homepage-only hero tile; wording and type unchanged. */}
+          <div className="pt-6">
+            <h1 className="text-[24px] leading-[32px] font-semibold">Learn Mahjong Together.</h1>
+            <p className="t-body text-muted mt-2">Your AI companion for learning new Mahjong traditions with friends.</p>
+          </div>
+          <div className="flex-1 flex items-center justify-center py-6 min-h-[220px]" aria-hidden>
+            <Image src={HERO.src} width={HERO.width} height={HERO.height} alt="" priority unoptimized draggable={false}
+              className="pointer-events-none select-none h-auto w-[min(62vw,240px)] max-h-[36dvh] object-contain" />
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex flex-col justify-center pb-16">
+          <h1 className="text-[24px] leading-[32px] font-semibold">Learn Mahjong Together.</h1>
+          <p className="t-body text-muted mt-2">Your AI companion for learning new Mahjong traditions with friends.</p>
+        </div>
+      )}
       <div className="flex flex-col gap-3 pb-3">
         <Btn onClick={() => setView("create")}>Create a Room</Btn>
         <Btn variant="secondary" onClick={() => setView("join")}>Join a Room</Btn>
         {recent && (
-          <button onClick={() => router.push(`/room/${recent}`)} className="t-sub text-muted min-h-11">Return to room {recent}</button>
+          <button onClick={() => router.push(`/room/${recent}`)} className="t-sub text-muted min-h-11">Return to Room {recent}</button>
         )}
       </div>
     </div>

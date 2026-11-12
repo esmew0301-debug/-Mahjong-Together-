@@ -95,7 +95,7 @@ export function CheckMyHand({ r, me, open, onClose, onDeclare }: { r: PublicRoom
               <>
                 {[{ k: "pureSuit", label: "Pure suit (full flush)" }, { k: "goldenHook", label: "Golden hook", disabled: c.structure === "seven_pairs" }, { k: "lastTile", label: "Last tile of the wall" }].map((x) => (
                   <label key={x.k} className={cx("flex items-center gap-3 min-h-11 t-body", x.disabled && "opacity-45")}>
-                    <input type="checkbox" className="h-5 w-5 accent-[#34C759]" disabled={x.disabled} checked={!!c[x.k]} onChange={(e) => set(x.k, e.target.checked)} /> {x.label}
+                    <input type="checkbox" className="h-5 w-5 accent-[var(--brand)]" disabled={x.disabled} checked={!!c[x.k]} onChange={(e) => set(x.k, e.target.checked)} /> {x.label}
                   </label>
                 ))}
                 <label className="flex items-center gap-3 min-h-11 t-body">Roots (four identical tiles):

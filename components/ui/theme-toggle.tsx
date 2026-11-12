@@ -8,7 +8,9 @@ const KEY = "mt.theme";
 /** Per-device light/dark switch. Stored in this browser only; other players' phones are unaffected. */
 export function ThemeToggle() {
   const [dark, setDark] = useState(false);
-  useEffect(() => setDark(document.documentElement.classList.contains("dark")), []);
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains("dark"));
+  }, []);
   const toggle = () => {
     const next = !dark;
     setDark(next);

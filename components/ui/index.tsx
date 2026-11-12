@@ -6,6 +6,7 @@ import type { Msg, MsgAction, PublicPlayer } from "@/lib/types";
 import { ShiningText } from "./shining-text";
 import { Reactable } from "./reactions";
 import { ThemeToggle } from "./theme-toggle";
+import { displayName } from "@/lib/names";
 import type { ReactionId } from "@/lib/types";
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -160,7 +161,7 @@ export function MessageList({ messages, me, players, onDetail, onAction, onReact
             </div>
           );
         const mine = m.sender === me;
-        const name = m.name || players?.find((p) => p.id === m.sender)?.name || "Player";
+        const name = displayName(m.name || players?.find((p) => p.id === m.sender)?.name || "Player");
         return (
           <div key={m.id} className={cx("flex flex-col gap-1 max-w-[82%]", mine ? "self-end items-end" : "self-start items-start")}>
             {!mine && <div className="t-meta text-muted px-1">{name}</div>}
@@ -233,7 +234,7 @@ export function useSpeech(onText: (t: string) => void) {
 }
 
 export function Composer({
-  placeholder, disabled, disabledText, onAsk, onSend, preferAsk, leading, above, inputRef, busy,
+  placeholder, disabled, disabledText, onAsk, onSend, preferAsk, leading, above, floating, inputRef, busy,
 }: {
   placeholder: string;
   disabled?: boolean;
@@ -243,6 +244,7 @@ export function Composer({
   preferAsk?: boolean;
   leading?: React.ReactNode;
   above?: React.ReactNode;
+  floating?: React.ReactNode;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   busy?: boolean;
 }) {
@@ -267,6 +269,7 @@ export function Composer({
   const secondary = onSend ? (primaryIsAsk ? onSend : onAsk) : undefined;
   return (
     <div className="sticky bottom-0 z-10 bg-bg px-3 pt-2 pb-safe shadow-composer">
+      {floating}
       {above}
       {disabled && disabledText ? (
         <div className="t-sub text-muted text-center py-3 bg-bubble rounded-[22px]">{disabledText}</div>
@@ -362,3 +365,71 @@ export function Count({ n, label }: { n: number; label: string }) {
   );
 }
 
+
+// ---------------- chat scroll anchoring ----------------
+/**
+ * Keeps the reader's place. New messages only auto-follow when the reader was already near the bottom
+ * (within ~100px) or when they sent the message themselves; otherwise an unread count is shown.
+ * Card/image resizes stick to the bottom only if the reader was already there. Never jumps on polling.
+ */
+export function useChatScroll(messages: { id: string; sender: string }[], me: string, contentRef: React.RefObject<HTMLElement | null>) {
+  const near = useRef(true);
+  const lastId = useRef<string | null>(null);
+  const [unread, setUnread] = useState(0);
+  const atBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100;
+  const toBottom = (smooth: boolean) => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+  };
+  useEffect(() => {
+    const onScroll = () => {
+      near.current = atBottom();
+      if (near.current) setUnread(0);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+  const latest = messages[messages.length - 1]?.id ?? null;
+  useEffect(() => {
+    if (lastId.current === null) {
+      // first render: start at the latest message
+      lastId.current = latest;
+      requestAnimationFrame(() => toBottom(false));
+      return;
+    }
+    if (latest === lastId.current) return;
+    const idx = messages.findIndex((m) => m.id === lastId.current);
+    const added = idx >= 0 ? messages.slice(idx + 1) : messages.slice(-1);
+    lastId.current = latest;
+    if (!added.length) return;
+    if (added.some((m) => m.sender === me) || near.current) {
+      setUnread(0);
+      requestAnimationFrame(() => toBottom(true));
+    } else setUnread((u) => u + added.length);
+  }, [latest]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (near.current) toBottom(false);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [contentRef]);
+  return { unread, jump: () => { setUnread(0); toBottom(true); } };
+}
+
+export function NewMessagesPill({ count, onClick }: { count: number; onClick: () => void }) {
+  if (count <= 0) return null;
+  return (
+    <div className="absolute left-0 right-0 -top-14 flex justify-center pointer-events-none">
+      <button type="button" onClick={onClick} aria-live="polite"
+        className="pointer-events-auto h-11 px-4 rounded-full bg-bg border border-line shadow-card t-sub font-medium text-green-text flex items-center gap-1.5 hover:bg-surface">
+        ↓ {count > 1 ? `${count} New Messages` : "New Messages"}
+      </button>
+    </div>
+  );
+}

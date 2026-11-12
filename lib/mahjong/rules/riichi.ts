@@ -14,7 +14,7 @@ export const RIICHI: RuleEntry[] = [
     simple: "Japanese Mahjong where your winning hand must include at least one special scoring pattern.",
     example: "You complete four sets and a pair but have no yaku and never declared riichi — under Riichi rules you can't win with that hand.",
     detail: "• 136 tiles: three suits plus winds and dragons\n• At least one yaku to win\n• Riichi declaration, furiten, dora\n• Chi (from your left only), pon, kan\n• No Exchange Three Tiles and no missing suit",
-    related: ["ri-yaku", "ri-riichi"], stages: ["ri-review"], source: S,
+    related: ["ri-yaku", "ri-riichi"], stages: [], source: S,
   },
   {
     id: "ri-tiles", variant: "riichi", ruleset: R, topic: "Riichi tiles", ruleType: "mandatory",
@@ -39,7 +39,7 @@ export const RIICHI: RuleEntry[] = [
     why: "It gives an otherwise plain closed hand a yaku and extra value, at the cost of locking your hand and warning everyone.",
     misunderstandings: ["You can't declare riichi after calling chi, pon, or an open kan — your hand must be closed."],
     detail: "• Requirements: closed hand, one tile from winning (tenpai), enough points for the 1,000-point stick.\n• Turn your discard sideways and place the stick.\n• Afterwards you can't change your hand.\n• Riichi counts as a yaku.",
-    related: ["ri-yaku", "ri-furiten"], stages: ["ri-review"], source: S,
+    related: ["ri-yaku", "ri-furiten"], stages: [], source: S,
   },
   {
     id: "ri-yaku", variant: "riichi", ruleset: R, topic: "Yaku", ruleType: "mandatory",
@@ -52,7 +52,7 @@ export const RIICHI: RuleEntry[] = [
     why: "Yaku give hands their value and stop players from winning with any random complete shape.",
     detail: "Common beginner yaku: riichi (closed hand declaration), all simples (tanyao), dragon triplet (yakuhai), fully concealed self-draw (menzen tsumo). Dora add value but are not yaku.",
     misunderstandings: ["Dora are not yaku — a hand with only dora can't win."],
-    stages: ["ri-review"], source: S,
+    stages: ["ri-winning"], source: S,
   },
   {
     id: "ri-dora", variant: "riichi", ruleset: R, topic: "Dora and the dead wall", ruleType: "mandatory",
@@ -64,7 +64,7 @@ export const RIICHI: RuleEntry[] = [
     simple: "One flipped tile tells you which tile is 'lucky' this round. Each one in your winning hand adds value.",
     example: "If the dora indicator is 4 Dots, then 5 Dots is the dora. If the indicator is North, East is the dora (winds cycle E→S→W→N→E).",
     detail: "• Dead wall: the last 14 tiles.\n• Flip the dora indicator in the dead wall at the start of the hand.\n• The dora is the next tile in sequence (9 wraps to 1; winds and dragons cycle).\n• Red fives, if used, also count as dora.",
-    stages: ["ri-break", "ri-review"], source: S,
+    stages: ["ri-deadwall", "ri-break"], source: S,
   },
   {
     id: "ri-furiten", variant: "riichi", ruleset: R, topic: "Furiten", ruleType: "mandatory",
@@ -76,7 +76,7 @@ export const RIICHI: RuleEntry[] = [
     example: "You're waiting on 3 or 6 Bamboo, but you discarded a 6 Bamboo earlier. You can't win when someone else discards a 3 Bamboo — only on your own draw.",
     why: "It stops players from throwing away a tile and then waiting for someone else to discard the same kind.",
     detail: "Furiten applies to all your waiting tiles, not just the one you discarded. There are also temporary furiten (after passing on a winning discard) and riichi furiten.",
-    stages: ["ri-review"], source: S,
+    stages: [], source: S,
   },
   {
     id: "ri-calls", variant: "riichi", ruleset: R, topic: "Chi, pon, and kan", ruleType: "mandatory",
@@ -88,7 +88,7 @@ export const RIICHI: RuleEntry[] = [
     simple: "Chi only from your left neighbor; pon and kan from anyone. Calling means you can't declare riichi.",
     example: "Your left neighbor discards 5 Characters and you hold 4 and 6: you can chi. If the player across discards it, you can't chi — only pon if you hold a pair of 5s.",
     detail: "• Chi: sequence, only from the player on your left.\n• Pon: triplet, from any player.\n• Kan: quad, from any player or concealed; draw a replacement from the dead wall.\n• An open hand can't riichi and loses closed-only yaku.",
-    stages: ["ri-review"], source: S,
+    stages: ["ri-turns"], source: S,
   },
   {
     id: "ri-setup", variant: "riichi", ruleset: R, topic: "Riichi setup", ruleType: "mandatory",
@@ -101,7 +101,7 @@ export const RIICHI: RuleEntry[] = [
       { id: "deal", cues: ["deal", "each player get", "13", "14"], answer: "Starting with the dealer, counter-clockwise, each player takes four tiles at a time for three rounds (12). Then the dealer takes two and the others one: dealer 14, others 13." },
     ],
     detail: "The reference guide says East is the dealer but doesn't fix how seats are chosen; drawing wind tiles is a widely used method. Wall: 17 stacks per player. Counting for the break follows WRC-style rules.",
-    stages: ["ri-seats", "ri-wall", "ri-break", "ri-deal"], source: S,
+    stages: ["ri-seats", "ri-wall", "ri-deal"], source: S,
   },
   {
     id: "ri-not-sichuan", variant: "riichi", ruleset: R, topic: "No exchange or missing suit", ruleType: "info",

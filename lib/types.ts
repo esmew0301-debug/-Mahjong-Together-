@@ -1,5 +1,5 @@
 export type VariantId = "sichuan" | "riichi" | "cantonese" | "american";
-export type RoomStatus = "lobby" | "variant" | "setup" | "playing" | "hand_review" | "session_review" | "complete";
+export type RoomStatus = "lobby" | "variant" | "setup" | "playing" | "hand_review" | "reconciling" | "session_review" | "complete";
 export type AiMode = "live" | "demo" | "unavailable";
 
 export interface Player {
@@ -31,7 +31,8 @@ export interface Msg {
   name?: string;
   text: string;
   title?: string;
-  kind?: "summary" | "guide";
+  kind?: "summary" | "guide" | "declaration";
+  eventId?: string;
   aiMode?: AiMode;
   detail?: string;
   source?: string;
@@ -130,6 +131,8 @@ export interface Room {
   ledgerVersion?: number;
   nextDealerVotes?: Record<string, string>;
   finalReview?: { ledgerVersion: number; resp: Record<string, "confirm" | "correct">; returnTo: RoomStatus } | null;
+  endProposal?: { id: string; by: string; votes: Record<string, "agree" | "keep" | "wait">; createdAt: number; fromStatus: RoomStatus } | null;
+  endedEarly?: { at: number; fromStatus: RoomStatus; handInProgress: boolean } | null;
 }
 
 export interface PublicRoom extends Omit<Room, "players"> {

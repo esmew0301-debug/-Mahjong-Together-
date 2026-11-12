@@ -4,14 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { BookOpen, Camera, Check, ChevronRight, Copy, Flag, HelpCircle, ImagePlus, ListChecks, Lock, MoreHorizontal, Sparkles, Users, X } from "lucide-react";
-import { api, openQuestionCount, rememberRoom, useRoom } from "@/lib/client";
+import { api, forgetRoom, openQuestionCount, rememberRoom, useRoom } from "@/lib/client";
 import type { GameEvent, Msg, MsgAction, PublicPlayer, PublicRoom } from "@/lib/types";
-import { EventCard, FinalResults, GameBar, HandReviewPanel, RecordEventSheet, ScoresSheet, SessionReviewPanel, describeEvent, topicForEvent } from "./Game";
+import { EndProposalPanel, EventCard, FinalResults, GameBar, HandReviewPanel, ReconcilePanel, RecordEventSheet, ScoresSheet, SessionReviewPanel, describeEvent, topicForEvent } from "./Game";
 import { CheckMyHand } from "./CheckMyHand";
 import { topicsForBrowse } from "@/lib/mahjong/assistant";
 import { entryById } from "@/lib/mahjong/intent-matcher";
 import { VARIANTS, fill, stepById, variantById, visibleSteps, type Step, type Variant } from "@/lib/variants";
-import { Avatar, Btn, Composer, Count, Header, IconBtn, MessageList, Panel, Prose, Sheet, Statuses, Typing, cx } from "./ui";
+import { Avatar, Btn, Composer, Count, Header, IconBtn, MessageList, NewMessagesPill, Panel, Prose, Sheet, Statuses, Typing, cx, useChatScroll } from "./ui";
+import { Confetti, type ConfettiRef } from "./ui/confetti";
+import { useReducedMotion } from "motion/react";
+
+const END_GAME_COMMAND = /^\s*end\s*game\s*[.!]*\s*$/i;
+import { BRAND_GREEN } from "@/lib/brand";
 
 type Detail = { title: string; body: string; source?: string } | null;
 type Actions = ReturnType<typeof useRoom>;
@@ -41,9 +46,12 @@ export function RoomApp({ code }: { code: string }) {
   useEffect(() => {
     if (room.notMember) router.replace(`/join/${code}`);
   }, [room.notMember, code, router]);
+  const status = room.data?.room.status;
   useEffect(() => {
-    if (room.data) rememberRoom(code);
-  }, [room.data, code]);
+    if (!status) return;
+    if (status === "complete") forgetRoom(code); // a finished session is not resumable
+    else rememberRoom(code);
+  }, [status, code]);
 
   if (room.fatal)
     return (
@@ -180,11 +188,32 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
   const isHost = r.hostId === me;
   const needsHelp = !!r.check?.needs.includes(me);
   const openQs = openQuestionCount(r.messages, r.lastSummaryTs);
-  const count = r.messages.length;
+  const mainRef = useRef<HTMLElement>(null);
+  const visibleMsgs = useMemo(() => r.messages.filter((m) => !(m.sender === "system" && /created the room|joined the room/.test(m.text))), [r.messages]);
+  const chatScroll = useChatScroll(visibleMsgs, me, mainRef);
+  const [endConfirm, setEndConfirm] = useState(false);
+  const reduceMotion = useReducedMotion();
 
+  // Small, one-time confetti when a player DECLARES a win (not a verified win). Keyed by event id so polling,
+  // refresh and re-renders never replay it; declarations older than a minute are marked seen silently.
+  const declConfetti = useRef<ConfettiRef>(null);
+  const declOptions = useMemo(() => ({ resize: true, useWorker: true }), []);
   useEffect(() => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-  }, [count, r.status, r.stepId, !!r.check]);
+    const decls = r.messages.filter((m) => m.kind === "declaration" && m.eventId);
+    if (!decls.length) return;
+    const key = `mt.seenDecl.${r.code}`;
+    let seen: string[] = [];
+    try { seen = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
+    const unseen = decls.filter((m) => !seen.includes(m.eventId!));
+    if (!unseen.length) return;
+    try { localStorage.setItem(key, JSON.stringify([...seen, ...unseen.map((m) => m.eventId!)].slice(-50))); } catch {}
+    const fresh = unseen.some((m) => Date.now() - m.ts < 60000);
+    if (!fresh || reduceMotion) return;
+    const burst = (x: number) => declConfetti.current?.fire({ particleCount: 18, angle: 270, spread: 70, startVelocity: 5, gravity: 0.8, ticks: 140, scalar: 0.8, origin: { x, y: -0.05 }, colors: ["#FFD60A", "#FF9F0A", "#FF2D55", "#0A84FF", "#AF52DE", BRAND_GREEN] });
+    burst(0.35);
+    const t = window.setTimeout(() => burst(0.65), 250);
+    return () => window.clearTimeout(t);
+  }, [r.messages, r.code, reduceMotion]);
 
   const ask = (q: string) => run(async () => { setThinking(true); try { await actions.ask(q); } finally { setThinking(false); } });
   const summarize = () => run(async () => { setThinking(true); try { await actions.summarize(); } finally { setThinking(false); } });
@@ -219,7 +248,7 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
   let panel: React.ReactNode = null;
   if (r.status === "variant") panel = <VariantPanel r={r} me={me} act={act} showVariant={showVariant} busy={busy} />;
   else if (r.check) panel = <CheckPanel r={r} me={me} act={act} onAction={onAction} viewRule={viewRule} busy={busy || thinking} />;
-  else if (r.status === "setup" && step) panel = <StepPanel r={r} me={me} step={step} act={act} explain={() => onAction({ label: "", type: "current" })} busy={busy || thinking} focus={() => inputRef.current?.focus()} details={() => setDetail({ title: step.title, body: fill(step.detail, r.decisions), source: step.source })} />;
+  else if (r.status === "setup" && step) panel = <StepPanel r={r} me={me} step={step} act={act} explain={() => onAction({ label: "", type: "current" })} busy={busy || thinking} focus={() => inputRef.current?.focus()} details={() => setDetail({ title: step.title, body: fill(step.detail, r.decisions), source: step.source })} showExample={() => setDetail({ title: `Example: ${step.title}`, body: step.example || "", source: step.source })} />;
   const gamePanels = (
     <>
       {pendingEvents.map((e) => (
@@ -229,11 +258,13 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
       ))}
       {r.status === "playing" && <GameBar r={r} me={me} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} openScores={() => setScoresOpen(true)} reviewRules={reviewRules} openCoach={openCoach} />}
       {r.status === "hand_review" && r.hand && <HandReviewPanel r={r} me={me} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} openScores={() => setScoresOpen(true)} />}
+      {r.status === "reconciling" && <ReconcilePanel r={r} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} />}
       {r.status === "session_review" && r.finalReview && <SessionReviewPanel r={r} me={me} act={act} busy={busy} />}
     </>
   );
 
   const canFacilitate = r.status === "setup" || r.status === "playing" || r.status === "hand_review";
+  const canEnd = !["lobby", "complete", "reconciling"].includes(r.status) && !(r.status === "session_review" && r.endedEarly);
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Header
@@ -252,18 +283,21 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
         {actions.conn === "retrying" && <div className="px-4 py-1.5 t-meta text-muted border-t border-line">Reconnecting…</div>}
       </Header>
 
-      <main className="flex-1 px-4 py-6 flex flex-col gap-6">
-        <MessageList messages={r.messages.filter((m) => !(m.sender === "system" && /created the room|joined the room/.test(m.text)))} me={me} players={r.players} onDetail={showMsg} onAction={onAction} onReact={(msgId, reaction) => act({ type: "react", msgId, reaction })} busy={thinking} />
+      <Confetti ref={declConfetti} manualstart globalOptions={declOptions} className="pointer-events-none fixed inset-x-0 top-0 z-30 w-full h-[45vh]" aria-hidden />
+      <main ref={mainRef} className="flex-1 px-4 py-6 flex flex-col gap-6">
+        <MessageList messages={visibleMsgs} me={me} players={r.players} onDetail={showMsg} onAction={onAction} onReact={(msgId, reaction) => act({ type: "react", msgId, reaction })} busy={thinking} />
         {thinking && <Typing />}
         {panel}
-        {["playing", "hand_review", "session_review"].includes(r.status) && gamePanels}
+        {["playing", "hand_review", "reconciling", "session_review"].includes(r.status) && gamePanels}
+        {r.endProposal && <EndProposalPanel r={r} me={me} act={act} busy={busy} />}
         {error && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{error}</p>}
       </main>
 
       <Composer
         inputRef={inputRef}
         placeholder={needsHelp ? "Which part should we review?" : "Message the table or ask a question..."}
-        onSend={(t) => act({ type: "message", text: t })}
+        onSend={(t) => (END_GAME_COMMAND.test(t) ? setEndConfirm(true) : act({ type: "message", text: t }))}
+        floating={<NewMessagesPill count={chatScroll.unread} onClick={chatScroll.jump} />}
         onAsk={ask}
         preferAsk={needsHelp}
         busy={thinking}
@@ -295,6 +329,14 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
       <Sheet open={browse} onClose={() => setBrowse(false)} title="Rule topics">
         <TopicList variant={r.variant} onPick={(id) => { setBrowse(false); onAction({ label: "", type: "followup", topicId: id, facet: "short" }); }} />
       </Sheet>
+      <Sheet open={endConfirm} onClose={() => setEndConfirm(false)} title="End This Game?">
+        <p className="t-body">Ask everyone to stop this session and review the scores?</p>
+        <p className="t-sub text-muted mt-2">All four players must agree. Nothing changes if anyone wants to keep playing.</p>
+        <div className="grid grid-cols-2 gap-2 mt-5">
+          <Btn variant="secondary" onClick={() => setEndConfirm(false)}>Cancel</Btn>
+          <Btn disabled={busy || !canEnd} onClick={() => { setEndConfirm(false); act({ type: "end-propose" }); }}>Request to End Game</Btn>
+        </div>
+      </Sheet>
       <RecordEventSheet r={r} me={me} open={recordOpen} onClose={() => { setRecordOpen(false); setRevise(null); }} act={act} busy={busy} revise={revise} />
       <ScoresSheet r={r} me={me} open={scoresOpen} onClose={() => setScoresOpen(false)} />
 
@@ -325,6 +367,7 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
             Room {r.code}. Answers come from the built-in Mahjong Rule Assistant — prepared, sourced rule notes matched to your question. It isn't a generative AI, and no questions are sent to any AI service.
             {data.backend === "dev-file" ? " Using the local development store (this computer only)." : ""}
           </p>
+          {canEnd && !r.endProposal && <Btn variant="secondary" onClick={() => { setMenu(false); setEndConfirm(true); }}>End Game</Btn>}
           <Btn variant="secondary" onClick={() => router.push("/")}>Leave to Home</Btn>
           <p className="t-meta text-muted">Leaving keeps your seat. Open the same room link on this device to come back.</p>
         </div>
@@ -403,9 +446,9 @@ function CheckPanel({ r, me, act, onAction, viewRule, busy }: { r: PublicRoom; m
       </div>
       <p className="t-sub text-muted -mt-2">{c.topic}. We'll continue only when everyone understands.</p>
       <Statuses players={r.players} value={(p) => c.resp[p.id]} labels={{ yes: { text: "Understands", ok: true }, no: { text: "Needs clarification" } }} />
-      <div className="grid grid-cols-[1.5fr_1fr] gap-2">
-        <Btn variant={mine === "yes" ? "ok" : "primary"} disabled={busy || mine === "yes"} onClick={() => act({ type: "check", value: "yes" })}>{mine === "yes" ? <><Check size={16} /> I understand</> : <span className="whitespace-nowrap">Yes, I Understand</span>}</Btn>
-        <Btn variant={mine === "no" ? "chosen" : "secondary"} disabled={busy || mine === "no"} onClick={() => act({ type: "check", value: "no" })}>Not Yet</Btn>
+      <div className="grid grid-cols-2 gap-2">
+        <Btn variant={mine === "yes" ? "ok" : "primary"} disabled={busy || mine === "yes"} onClick={() => act({ type: "check", value: "yes" })}>{mine === "yes" ? <><Check size={16} /> I understand</> : <span className="whitespace-nowrap">I Understand</span>}</Btn>
+        <Btn variant={mine === "no" ? "chosen" : "secondary"} className="px-2 text-[14px] whitespace-nowrap" disabled={busy || mine === "no"} onClick={() => act({ type: "check", value: "no" })}>Need Explanation</Btn>
       </div>
       {mine === "no" && (
         <div className="bg-surface rounded-xl p-3 flex flex-col gap-2">
@@ -424,7 +467,7 @@ function CheckPanel({ r, me, act, onAction, viewRule, busy }: { r: PublicRoom; m
   );
 }
 
-function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: PublicRoom; me: string; step: Step; act: (a: Record<string, unknown>) => void; explain: () => void; busy: boolean; focus: () => void; details: () => void }) {
+function StepPanel({ r, me, step, act, explain, busy, focus, details, showExample }: { r: PublicRoom; me: string; step: Step; act: (a: Record<string, unknown>) => void; explain: () => void; busy: boolean; focus: () => void; details: () => void; showExample: () => void }) {
   const [total, setTotal] = useState<string>("");
   const [d1, setD1] = useState<number | null>(null);
   const [d2, setD2] = useState<number | null>(null);
@@ -451,12 +494,12 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: Pub
     </div>
   );
   const doneCount = r.players.filter((p) => r.resp[p.id] === "done").length;
-  const completion = (q: string, yes = "Yes, Done") => (
+  const completion = (q: string, yes = "I've Finished This Step") => (
     <>
       {head(q, doneCount, "done")}
       <Statuses players={r.players} value={(p) => r.resp[p.id]} labels={{ done: { text: "Done", ok: true }, notyet: { text: "Not yet" } }} />
       <div className="grid grid-cols-2 gap-2">
-        <Btn variant={mine === "done" ? "ok" : "primary"} disabled={busy || mine === "done"} onClick={() => act({ type: "respond", value: "done" })}>{mine === "done" ? <><Check size={16} /> Done</> : yes}</Btn>
+        <Btn variant={mine === "done" ? "ok" : "primary"} disabled={busy || mine === "done"} onClick={() => act({ type: "respond", value: "done" })}>{mine === "done" ? <><Check size={16} /> Finished</> : <span className="whitespace-nowrap text-[14px]">{yes}</span>}</Btn>
         <Btn variant={mine === "notyet" ? "chosen" : "secondary"} disabled={busy || mine === "notyet"} onClick={() => act({ type: "respond", value: "notyet" })}>Not Yet</Btn>
       </div>
       {mine === "notyet" && <p className="t-meta text-muted">Take your time. Ask the Rule Assistant or the group if you're stuck.</p>}
@@ -535,13 +578,16 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: Pub
       );
     } else body = completion(step.question || "Has the wall been broken?");
   } else {
-    body = completion(step.question || "Has everyone completed this step?", step.kind === "begin" ? "Yes, Ready to Play" : "Yes, Done");
+    body = completion(step.question || "Has everyone completed this step?", step.kind === "begin" ? "Yes, Ready to Play" : "I've Finished This Step");
   }
 
   return (
     <Panel label={step.title}>
       {body}
-      <button onClick={details} className="self-start t-sub font-medium text-green-text min-h-8 hover:underline underline-offset-4">Detailed instructions</button>
+      <div className="flex gap-4 flex-wrap">
+        <button onClick={details} className="t-sub font-medium text-green-text min-h-8 hover:underline underline-offset-4">Detailed instructions</button>
+        {step.example && <button onClick={showExample} className="t-sub font-medium text-green-text min-h-8 hover:underline underline-offset-4">Show Example</button>}
+      </div>
       {helpRow}
     </Panel>
   );
@@ -586,9 +632,8 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
   useEffect(() => {
     api(`/api/rooms/${r.code}/private`).then((j) => setMsgs(j.messages)).catch((e) => setErr(e.message));
   }, [r.code]);
-  useEffect(() => {
-    window.scrollTo({ top: document.body.scrollHeight });
-  }, [msgs?.length, thinking]);
+  const coachMain = useRef<HTMLElement>(null);
+  const coachScroll = useChatScroll(msgs || [], me, coachMain);
 
   const post = async (body: Record<string, unknown>, optimisticText: string, photo = false) => {
     setThinking(true);
@@ -638,7 +683,13 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Header title="My Private Coach" subtitle="Only you can see this conversation." onBack={onBack} backLabel="Back to Shared Table" />
-      <main className="flex-1 px-4 py-6 flex flex-col gap-6">
+      {r.endProposal && (
+        <div className="px-4 py-2 bg-surface border-b border-line flex items-center gap-3" role="status">
+          <span className="flex-1 t-sub">End Game requested — vote on the Shared Table.</span>
+          <Btn variant="secondary" className="min-h-10 px-3" onClick={onBack}>Go Vote</Btn>
+        </div>
+      )}
+      <main ref={coachMain} className="flex-1 px-4 py-6 flex flex-col gap-6">
         <div className="flex flex-col gap-2">
           <div className="t-section">Ask privately</div>
           <Prose text={`I'm your private Rule Assistant. Ask about ${variant ? variant.name : "Mahjong"} rules or general strategy without sharing it with the table. I can't see your tiles, so describe them in text if you want help thinking a decision through.`} />
@@ -655,6 +706,7 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
         inputRef={inputRef}
         placeholder="Ask your private coach..."
         onAsk={(t) => post({ question: t }, t)}
+        floating={<NewMessagesPill count={coachScroll.unread} onClick={coachScroll.jump} />}
         busy={thinking}
         disabled={done}
         disabledText="This session has ended."
@@ -702,5 +754,5 @@ function Complete({ r, me, actions }: { r: PublicRoom; me: string; actions: Acti
       ))}
     </section>
   );
-  return <FinalResults r={r} me={me} onHome={() => router.push("/")} reflection={reflection} />;
+  return <FinalResults r={r} me={me} onHome={() => { forgetRoom(r.code); router.push("/"); }} reflection={reflection} />;
 }

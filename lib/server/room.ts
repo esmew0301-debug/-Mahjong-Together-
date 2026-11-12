@@ -7,6 +7,7 @@ import {
 } from "../variants";
 import { entryForStage } from "../mahjong/intent-matcher";
 import { applyGameAction, initGame } from "./game";
+import { displayName } from "../names";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -39,7 +40,7 @@ export function push(room: Room, ...ms: Msg[]) {
   room.messages.push(...ms);
   if (room.messages.length > MAX_MSGS) room.messages = room.messages.slice(-MAX_MSGS);
 }
-export const nameOf = (room: Room, pid: string) => room.players.find((p) => p.id === pid)?.name ?? "A player";
+export const nameOf = (room: Room, pid: string) => displayName(room.players.find((p) => p.id === pid)?.name);
 
 export async function getRoom(code: string): Promise<Room | null> {
   const raw = await kv.get(roomKey(code));
@@ -141,7 +142,7 @@ export function enterStep(r: Room, s: Step) {
   push(r, msg({
     sender: "ai", aiMode: "demo", kind: "guide",
     title: `Step ${stepNumber(r, s)} of ${total} — ${s.title}`,
-    text: `${s.intro}\n\n${short}`,
+    text: [s.intro, short, s.why ? `Why: ${s.why}` : "", s.doSteps?.length ? `Do this:\n${s.doSteps.map((d, i) => `${i + 1}. ${d}`).join("\n")}` : ""].filter(Boolean).join("\n\n"),
     topicId: entryForStage(s.id)?.id,
     detail: fill(s.detail, r.decisions),
     source: s.source,
@@ -192,6 +193,10 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
   const isHost = r.hostId === pid;
   const step = stepById(r.stepId);
   if (r.status === "complete" && a.type !== "reflect" && a.type !== "react") throw new HttpError(409, "This session has ended.");
+  // After the group agreed to end, play is stopped: only chat, reactions, reconciliation and final review remain.
+  const STOPPED_OK = ["message", "react", "event-respond", "event-revise", "event-submit", "final-respond", "final-review-start", "finish-cancel", "remove"];
+  if ((r.status === "reconciling" || (r.status === "session_review" && r.endedEarly)) && !STOPPED_OK.includes(String(a.type)))
+    throw new HttpError(409, "The game has stopped. Finish reviewing the scores.");
 
   switch (a.type) {
     case "message": {

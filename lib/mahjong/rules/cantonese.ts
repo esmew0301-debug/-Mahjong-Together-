@@ -13,7 +13,7 @@ export const CANTONESE: RuleEntry[] = [
     short: "Hong Kong (Cantonese) Mahjong is a traditional style from Hong Kong and Guangdong, popular in many overseas Chinese communities. It uses all 144 tiles including flowers, allows chow, pung, and kong, and values hands in faan.",
     simple: "Classic Mahjong with every tile, flower bonuses, and a minimum hand value to win.",
     detail: "• 144 tiles incl. winds, dragons, flowers, seasons\n• Flowers and seasons are bonus tiles\n• Chow (from your left), pung, kong\n• Faan scoring with an agreed minimum\n• No tile exchange, no missing suit",
-    stages: ["hk-review"], source: S,
+    stages: [], source: S,
   },
   {
     id: "hk-tiles", variant: "cantonese", ruleset: R, topic: "Hong Kong tiles", ruleType: "mandatory",
@@ -35,7 +35,7 @@ export const CANTONESE: RuleEntry[] = [
     simple: "If you get a flower, put it aside and take another tile.",
     example: "After the deal you hold Flower 2 and Spring. Set both face up and draw two replacement tiles from the end of the wall. If a replacement is another flower, repeat.",
     detail: "• After the deal, starting with the dealer, set bonus tiles face up and draw replacements from the end of the wall until no one holds one.\n• During play, do the same whenever you draw a bonus tile.\n• A flower or season matching your seat can add faan, depending on your scoring table.",
-    stages: ["hk-deal"], source: S,
+    stages: ["hk-flowers"], source: S,
   },
   {
     id: "hk-faan", variant: "cantonese", ruleset: R, topic: "Faan", ruleType: "house rule",
@@ -57,7 +57,7 @@ export const CANTONESE: RuleEntry[] = [
     simple: "Runs only from your left neighbor; three or four of a kind from anyone.",
     example: "Your left neighbor discards 7 Bamboo and you hold 8 and 9 Bamboo: you can chow. If the player across discards it, you can't chow.",
     detail: "• Chow: sequence, from the player on your left only.\n• Pung: from any player.\n• Kong: from any player or concealed; draw a replacement from the end of the wall.",
-    stages: ["hk-review"], source: S,
+    stages: ["hk-calls"], source: S,
   },
   {
     id: "hk-winning", variant: "cantonese", ruleset: R, topic: "Winning a hand", ruleType: "mandatory",
@@ -66,7 +66,7 @@ export const CANTONESE: RuleEntry[] = [
     synonyms: ["胡牌", "食糊"],
     short: "A winning hand is four sets plus a pair that's worth at least your table's minimum faan. You can win on a discard or by self-draw.",
     detail: "Standard shape: four sets (chow, pung, or kong) plus a pair. Special hands exist on most faan tables. Check the minimum your group agreed on.",
-    stages: ["hk-review"], source: S,
+    stages: ["hk-winning"], source: S,
   },
   {
     id: "hk-setup", variant: "cantonese", ruleset: R, topic: "Hong Kong setup", ruleType: "mandatory",
@@ -79,7 +79,7 @@ export const CANTONESE: RuleEntry[] = [
       { id: "choose", cues: ["choose", "pick", "decide", "determine"], answer: "Sources differ: Jiada's HK rules have each player roll two dice (highest is East); HK Mahjong Rules has each player draw a wind tile, and whoever draws East picks a seat. This app uses the dice method — agree as a group." },
     ],
     detail: "Wall: 18 stacks per player (144 tiles). Deal: four tiles at a time for three rounds, then the dealer takes two and the others one. Then replace flowers.",
-    stages: ["hk-dealer", "hk-wall", "hk-break", "hk-deal"], source: S,
+    stages: ["hk-dealer", "hk-seats", "hk-wall", "hk-break", "hk-deal"], source: S,
   },
   {
     id: "hk-not-sichuan", variant: "cantonese", ruleset: R, topic: "No exchange or missing suit", ruleType: "info",

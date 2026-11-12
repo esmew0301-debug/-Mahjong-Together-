@@ -43,7 +43,7 @@ export const AMERICAN: RuleEntry[] = [
     misunderstandings: ["You can't skip the first Charleston — only the second one is optional.", "Jokers can't be passed."],
     detail: "First Charleston (required): Right → Across → Left, three tiles each.\nSecond Charleston (optional, unanimous): Left → Across → Right.\nCourtesy pass (optional): across, 0–3 tiles.\nJokers can't be passed.",
     next: "After the Charleston and any courtesy pass, East makes the first discard.",
-    stages: ["am-charleston1", "am-charleston2-vote", "am-charleston2", "am-courtesy"], source: S,
+    stages: ["am-ch1-right", "am-ch1-across", "am-ch1-left", "am-charleston2-vote", "am-ch2-left", "am-ch2-across", "am-ch2-right", "am-courtesy"], source: S,
   },
   {
     id: "am-jokers", variant: "american", ruleset: R, topic: "Jokers", ruleType: "mandatory",
@@ -66,7 +66,7 @@ export const AMERICAN: RuleEntry[] = [
     simple: "Buy this year's card — your winning hand has to match one of its hands exactly.",
     example: "If the card lists a hand of specific Dragons, Flowers, and numbers, your 14 tiles must match that pattern exactly (jokers allowed only in groups of three or more).",
     detail: "The NMJL publishes a new card each year. Players choose a target hand from the card and adjust after the Charleston. Hands marked closed can't use exposed groups.",
-    stages: ["am-review"], source: S,
+    stages: ["am-card"], source: S,
   },
   {
     id: "am-flowers", variant: "american", ruleset: R, topic: "Flowers in American Mah Jongg", ruleType: "mandatory",
