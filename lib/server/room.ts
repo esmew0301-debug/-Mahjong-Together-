@@ -1,11 +1,12 @@
 import "server-only";
 import crypto from "crypto";
 import { kv } from "./kv";
-import type { Check, Msg, PublicPlayer, PublicRoom, Room, VariantId } from "../types";
+import { REACTION_IDS, type Check, type Msg, type PublicPlayer, type PublicRoom, type ReactionId, type Room, type VariantId } from "../types";
 import {
   VARIANTS, breakInstruction, fill, firstStep, nextStep, stepById, stepImage, variantById, visibleSteps, type Step,
 } from "../variants";
 import { entryForStage } from "../mahjong/intent-matcher";
+import { applyGameAction, initGame } from "./game";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -155,6 +156,7 @@ function advance(r: Room) {
   const n = s.kind === "begin" ? null : nextStep(s, r.decisions);
   if (!n) {
     r.status = "playing";
+    initGame(r);
     r.stepId = null;
     r.resp = {};
     r.check = null;
@@ -189,7 +191,7 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
   const me = nameOf(r, pid);
   const isHost = r.hostId === pid;
   const step = stepById(r.stepId);
-  if (r.status === "complete" && a.type !== "reflect") throw new HttpError(409, "This session has ended.");
+  if (r.status === "complete" && a.type !== "reflect" && a.type !== "react") throw new HttpError(409, "This session has ended.");
 
   switch (a.type) {
     case "message": {
@@ -331,28 +333,19 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
       push(r, msg({ sender: "ai", aiMode: "demo", title: `Dice: ${d1} + ${d2}`, text: breakInstruction(step.breakMethod!, d1, d2, dealerName), source: step.source }));
       return;
     }
-    case "finish-request": {
-      if (!isHost) throw new HttpError(403, "Only the host can finish the game.");
-      if (r.status !== "playing") throw new HttpError(409, "The game isn't in progress.");
-      r.status = "finishing";
-      r.finish = { [pid]: "yes" };
-      push(r, msg({ sender: "system", text: `${me} asked to end the session. Everyone needs to confirm.` }));
-      return;
-    }
-    case "finish": {
-      if (r.status !== "finishing" || !r.finish) throw new HttpError(409, "No finish request.");
-      if (a.value !== "yes") {
-        r.status = "playing";
-        r.finish = null;
-        push(r, msg({ sender: "system", text: `${me} wants to keep playing. The session continues.` }));
-        return;
-      }
-      r.finish[pid] = "yes";
-      if (allAnswered(r, r.finish)) {
-        r.status = "complete";
-        r.check = null;
-        push(r, msg({ sender: "system", text: "Session complete. Thanks for learning and playing together." }));
-      }
+    case "react": {
+      // Tapback-style reaction: one reaction per player per message; same reaction again or null removes it.
+      const m = r.messages.find((x) => x.id === a.msgId);
+      if (!m) throw new HttpError(404, "Message not found");
+      // Reactions are for human messages only — never the Rule Assistant, system notes, or panels.
+      if (!r.players.some((p) => p.id === m.sender) && !m.name) throw new HttpError(400, "Only messages from players can receive reactions.");
+      if (m.sender === "ai" || m.sender === "system") throw new HttpError(400, "Only messages from players can receive reactions.");
+      const val = a.reaction === null ? null : String(a.reaction);
+      if (val !== null && !REACTION_IDS.includes(val as ReactionId)) throw new HttpError(400, "Unknown reaction");
+      const next = { ...(m.reactions || {}) };
+      if (val === null || next[pid] === val) delete next[pid];
+      else next[pid] = val as ReactionId;
+      m.reactions = next;
       return;
     }
     case "reflect": {
@@ -367,12 +360,12 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
       const name = nameOf(r, target);
       r.players = r.players.filter((p) => p.id !== target);
       delete r.votes[target]; delete r.resp[target]; delete r.dice[target];
-      if (r.finish) delete r.finish[target];
       if (r.check) { delete r.check.resp[target]; r.check.needs = r.check.needs.filter((x) => x !== target); }
       push(r, msg({ sender: "system", text: `${name}'s seat is now open. A new player can join with the room code.` }));
       return;
     }
     default:
+      if (applyGameAction(r, pid, a)) return;
       throw new HttpError(400, "Unknown action");
   }
 }

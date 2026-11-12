@@ -90,8 +90,12 @@ function currentStepReply(ctx: Ctx, facet: GenericFacet | null): Reply {
   const step = stepById(ctx.stepId);
   if (ctx.status === "variant" || ctx.status === "lobby")
     return { text: "Right now your group is choosing a Mahjong variant. Everyone picks one below — all four need to choose the same variant to continue. Tap \"Rules & Cultural Background\" on any option to compare.", actions: [{ label: "Compare the Variants", type: "followup", topicId: "g-variants", facet: "short" }] };
+  if (ctx.status === "hand_review")
+    return { text: "This hand is finished. Check the hand summary, then everyone chooses who deals next to start the next hand — or the host can finish the session. Scores carry over between hands." };
+  if (ctx.status === "session_review")
+    return { text: "Your group is reviewing the final scores. Each player confirms the same final ledger, or requests a correction if something looks wrong." };
   if (!step)
-    return { text: "You're in the game now — keep playing with your physical tiles. Ask me about any rule, or open My Private Coach for questions about your own hand.", actions: [{ label: "Browse Rule Topics", type: "browse" }] };
+    return { text: "You're in the game — keep playing with your physical tiles. When a kong or a win happens, open Record Event so all four can verify it before points change. Ask me about any rule, or open My Private Coach for questions about your own hand.", actions: [{ label: "Browse Rule Topics", type: "browse" }] };
   const e = entryForStage(step.id);
   if (facet && e) return answerTopic(e, facet, { ctx });
   return {

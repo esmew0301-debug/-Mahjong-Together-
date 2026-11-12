@@ -66,10 +66,10 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
             ) : (
               <label className="flex flex-col gap-1.5">
                 <span className="t-sub font-medium">Your name</span>
-                <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="e.g. Jamie" className="h-12 px-4 rounded-xl border border-line outline-none focus:border-ink" />
+                <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="e.g. Jamie" className="h-12 px-4 rounded-xl border border-line outline-none focus:border-green" />
               </label>
             )}
-            {err && <p className="t-sub text-[#B42318]" role="alert">{err}</p>}
+            {err && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{err}</p>}
             <div className="flex-1" />
             {!full && !ended && <Btn type="submit" disabled={busy} className="w-full mb-[max(12px,env(safe-area-inset-bottom))]">{busy ? "Joining…" : "Join Room"}</Btn>}
           </form>

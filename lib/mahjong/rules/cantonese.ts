@@ -42,7 +42,7 @@ export const CANTONESE: RuleEntry[] = [
     examples: ["What is Faan?", "What is the minimum to win?"],
     keywords: ["faan", "fan", "minimum", "chicken hand", "score", "scoring", "points", "hand value"],
     synonyms: ["番", "起糊", "鸡糊"],
-    short: "Faan are the units used to value a Hong Kong hand. Traditional rules require at least 3 faan to win, but tables often agree on a lower minimum or allow a 'chicken hand' with no faan. Your group chose its minimum during setup.",
+    short: "Faan are the units used to value a Hong Kong hand. Traditional rules require at least 3 faan to win, but tables often agree on a lower minimum or allow a 'chicken hand' with no faan. This app doesn't automate faan tables — enter the agreed transfers for the group to verify.",
     simple: "Faan are points for special features of your hand; you need enough of them to be allowed to win.",
     example: "An all-pungs hand, a dragon pung, or a matching flower each add faan. With a 3-faan minimum, a plain hand with only one faan can't win.",
     detail: "HK Mahjong Rules: winning hands must be worth at least 3 faan under traditional rules; some tables allow a chicken hand. Point tables vary, so this app doesn't calculate faan.",

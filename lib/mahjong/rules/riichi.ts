@@ -112,4 +112,13 @@ export const RIICHI: RuleEntry[] = [
     detail: "Riichi's special rules are yaku, riichi declarations, furiten, and dora instead.",
     source: S,
   },
+  {
+    id: "ri-scoring", variant: "riichi", ruleset: R, topic: "Riichi scoring", ruleType: "mandatory",
+    examples: ["How does scoring work?", "What is Ron and Tsumo?"],
+    keywords: ["score", "scoring", "points", "han", "fu", "ron", "tsumo", "honba", "yakuman", "riichi stick", "who pays", "payment"],
+    synonyms: ["点数", "荣和", "自摸"],
+    short: "Riichi hands are scored from han (yaku and dora) and fu, with different payments for the dealer and for Ron (discard) versus Tsumo (self-draw). This app doesn't automate that table: work out the payment with your score chart and enter each transfer for the group to verify.",
+    detail: "Ron: the discarder pays. Tsumo: payment is split among the other players (the dealer pays more). Riichi sticks and honba counters add to payments. Use Record Event → manual transfers; all four confirm.",
+    source: S,
+  },
 ];

@@ -3,54 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { BookOpen, Camera, Check, Copy, Flag, HelpCircle, ImagePlus, ListChecks, Lock, MoreHorizontal, Sparkles, Users, X } from "lucide-react";
+import { BookOpen, Camera, Check, ChevronRight, Copy, Flag, HelpCircle, ImagePlus, ListChecks, Lock, MoreHorizontal, Sparkles, Users, X } from "lucide-react";
 import { api, openQuestionCount, rememberRoom, useRoom } from "@/lib/client";
-import type { Msg, MsgAction, PublicPlayer, PublicRoom } from "@/lib/types";
+import type { GameEvent, Msg, MsgAction, PublicPlayer, PublicRoom } from "@/lib/types";
+import { EventCard, FinalResults, GameBar, HandReviewPanel, RecordEventSheet, ScoresSheet, SessionReviewPanel, describeEvent, topicForEvent } from "./Game";
+import { CheckMyHand } from "./CheckMyHand";
 import { topicsForBrowse } from "@/lib/mahjong/assistant";
 import { entryById } from "@/lib/mahjong/intent-matcher";
 import { VARIANTS, fill, stepById, variantById, visibleSteps, type Step, type Variant } from "@/lib/variants";
-import { Avatar, Btn, Composer, Header, IconBtn, MessageList, Prose, Sheet, Typing, cx } from "./ui";
+import { Avatar, Btn, Composer, Count, Header, IconBtn, MessageList, Panel, Prose, Sheet, Statuses, Typing, cx } from "./ui";
 
 type Detail = { title: string; body: string; source?: string } | null;
 type Actions = ReturnType<typeof useRoom>;
-
-// ---------------- shared bits ----------------
-function Panel({ children, label }: { children: React.ReactNode; label?: string }) {
-  return (
-    <section aria-label={label} className="border border-line rounded-xl bg-white p-4 flex flex-col gap-3">
-      {children}
-    </section>
-  );
-}
-
-function Statuses({ players, value, labels }: { players: PublicPlayer[]; value: (p: PublicPlayer) => string | undefined; labels: Record<string, { text: string; ok?: boolean }> }) {
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {players.map((p) => {
-        const v = value(p);
-        const l = v ? labels[v] || { text: v } : null;
-        return (
-          <li key={p.id} className="flex items-center gap-2 t-sub">
-            <Avatar name={p.name} size={24} dim={!v} />
-            <span className="flex-1 min-w-0 truncate">{p.name}</span>
-            <span className={cx("shrink-0 flex items-center gap-1", l?.ok ? "text-ok font-medium" : l ? "text-ink" : "text-muted")}>
-              {l?.ok && <Check size={14} strokeWidth={2.25} />}
-              {l ? l.text : "Waiting"}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function Count({ n, label }: { n: number; label: string }) {
-  return (
-    <span className={cx("t-meta font-medium", n === 4 ? "text-ok" : "text-muted")} aria-live="polite">
-      {n}/4 {label}
-    </span>
-  );
-}
 
 function useBusy() {
   const [busy, setBusy] = useState(false);
@@ -96,7 +60,7 @@ export function RoomApp({ code }: { code: string }) {
   const { room: r, me } = room.data;
   if (r.status === "lobby") return <Lobby r={r} me={me} actions={room} />;
   if (r.status === "complete") return <Complete r={r} me={me} actions={room} />;
-  if (view === "coach") return <Coach r={r} me={me} onBack={() => setView("table")} />;
+  if (view === "coach") return <Coach r={r} me={me} onBack={() => setView("table")} act={room.act} />;
   return <Table data={room.data} actions={room} openCoach={() => setView("coach")} />;
 }
 
@@ -149,13 +113,13 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
           <div className="flex items-baseline justify-between">
             <h2 className="t-section">{n}/4 Players Joined</h2>
           </div>
-          <ul className="mt-3 border border-line rounded-xl divide-y divide-line">
+          <ul className="mt-3 border border-line rounded-2xl bg-bg shadow-card divide-y divide-line overflow-hidden">
             {[0, 1, 2, 3].map((seat) => {
               const p = r.players.find((x) => x.seat === seat);
               if (!p)
                 return (
                   <li key={seat} className="min-h-14 px-3 flex items-center gap-3 text-muted">
-                    <span className="h-8 w-8 rounded-full border border-dashed border-[#CFCFCF]" aria-hidden />
+                    <span className="h-8 w-8 rounded-full border-[1.5px] border-dashed border-dash" aria-hidden />
                     <span className="t-sub">Waiting for Player {seat + 1}</span>
                   </li>
                 );
@@ -165,7 +129,7 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
                   <div className="flex-1 min-w-0">
                     <div className="t-body font-medium truncate">{p.name}{p.id === me && <span className="text-muted font-normal"> (you)</span>}</div>
                     <div className="t-meta text-muted flex items-center gap-1.5">
-                      <span className={cx("h-1.5 w-1.5 rounded-full", p.presence === "online" ? "bg-ok" : "bg-[#B4B4B4]")} />
+                      <span className={cx("h-1.5 w-1.5 rounded-full", p.presence === "online" ? "bg-green" : "bg-dash")} />
                       {p.id === r.hostId ? "Host · " : ""}{presenceText(p)}
                     </div>
                   </div>
@@ -183,8 +147,8 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
           )}
         </section>
       </main>
-      <div className="sticky bottom-0 bg-white px-4 pt-3 pb-safe border-t border-line flex flex-col gap-2">
-        {error && <p className="t-sub text-[#B42318] text-center">{error}</p>}
+      <div className="sticky bottom-0 bg-bg px-4 pt-3 pb-safe border-t border-line flex flex-col gap-2">
+        {error && <p className="t-sub text-[#B42318] dark:text-[#FF6961] text-center">{error}</p>}
         {isHost ? (
           <>
             <Btn className="w-full" disabled={n < 4 || busy} onClick={() => run(() => actions.act({ type: "start" }))}>Start Learning Session</Btn>
@@ -226,11 +190,15 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
   const summarize = () => run(async () => { setThinking(true); try { await actions.summarize(); } finally { setThinking(false); } });
   const act = (a: Record<string, unknown>) => run(() => actions.act(a));
   const [browse, setBrowse] = useState(false);
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [revise, setRevise] = useState<GameEvent | null>(null);
+  const [scoresOpen, setScoresOpen] = useState(false);
   const withThinking = (fn: () => Promise<unknown>) => run(async () => { setThinking(true); try { await fn(); } finally { setThinking(false); } });
   const onAction = (a: MsgAction) => {
     if (a.type === "followup" && a.topicId) withThinking(() => actions.followup(a.topicId!, a.facet || "short"));
     else if (a.type === "current") withThinking(() => actions.current());
     else if (a.type === "browse") setBrowse(true);
+    else if (a.topicId?.startsWith("event:")) document.getElementById(`event-${a.topicId.slice(6)}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     else inputRef.current?.focus();
   };
   const viewRule = (topicId?: string) => {
@@ -247,48 +215,25 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
   };
   const online = r.players.filter((p) => p.presence === "online").length;
 
+  const pendingEvents = (r.events || []).filter((e) => e.status === "pending");
   let panel: React.ReactNode = null;
   if (r.status === "variant") panel = <VariantPanel r={r} me={me} act={act} showVariant={showVariant} busy={busy} />;
   else if (r.check) panel = <CheckPanel r={r} me={me} act={act} onAction={onAction} viewRule={viewRule} busy={busy || thinking} />;
   else if (r.status === "setup" && step) panel = <StepPanel r={r} me={me} step={step} act={act} explain={() => onAction({ label: "", type: "current" })} busy={busy || thinking} focus={() => inputRef.current?.focus()} details={() => setDetail({ title: step.title, body: fill(step.detail, r.decisions), source: step.source })} />;
-  else if (r.status === "playing")
-    panel = (
-      <Panel label="Game in progress">
-        <div>
-          <div className="t-section">Game in Progress</div>
-          <p className="t-sub text-muted">Play at your own pace. Ask whenever you need help.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Btn variant="secondary" className="px-3.5" onClick={() => inputRef.current?.focus()}><Users size={16} strokeWidth={1.75} /> Ask the Group</Btn>
-          <Btn variant="secondary" className="px-3.5" onClick={() => inputRef.current?.focus()}><Sparkles size={16} strokeWidth={1.75} /> Ask Rule Assistant</Btn>
-          <Btn variant="secondary" className="px-3.5" onClick={openCoach}><Lock size={16} strokeWidth={1.75} /> My Private Coach</Btn>
-          <Btn variant="secondary" className="px-3.5" onClick={reviewRules}><BookOpen size={16} strokeWidth={1.75} /> Review Rules</Btn>
-        </div>
-        {isHost ? (
-          <Btn onClick={() => act({ type: "finish-request" })} disabled={busy}><Flag size={16} strokeWidth={1.75} /> Finish Game</Btn>
-        ) : (
-          <p className="t-meta text-muted">The host can finish the game when your group is done.</p>
-        )}
-      </Panel>
-    );
-  else if (r.status === "finishing" && r.finish) {
-    const mine = r.finish[me];
-    panel = (
-      <Panel label="Finish game">
-        <div className="flex items-center justify-between gap-2">
-          <div className="t-section">Ready to End This Session?</div>
-          <Count n={Object.keys(r.finish).length} label="confirmed" />
-        </div>
-        <Statuses players={r.players} value={(p) => r.finish![p.id]} labels={{ yes: { text: "Yes, finish", ok: true } }} />
-        <div className="grid grid-cols-2 gap-2">
-          <Btn variant={mine === "yes" ? "ok" : "primary"} disabled={busy || mine === "yes"} onClick={() => act({ type: "finish", value: "yes" })}>{mine === "yes" ? <><Check size={16} /> Confirmed</> : "Yes, Finish"}</Btn>
-          <Btn variant="secondary" disabled={busy} onClick={() => act({ type: "finish", value: "no" })}>Keep Playing</Btn>
-        </div>
-      </Panel>
-    );
-  }
+  const gamePanels = (
+    <>
+      {pendingEvents.map((e) => (
+        <EventCard key={e.id} r={r} me={me} e={e} act={act} busy={busy}
+          onExplain={(ev) => { const t = topicForEvent(r, ev); if (t) onAction({ label: "", type: "followup", topicId: t, facet: "short" }); else setDetail({ title: describeEvent(r, ev).title, body: ev.lines.join("\n"), source: ev.source }); }}
+          onCorrect={(ev) => { setRevise(ev); setRecordOpen(true); }} />
+      ))}
+      {r.status === "playing" && <GameBar r={r} me={me} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} openScores={() => setScoresOpen(true)} reviewRules={reviewRules} openCoach={openCoach} />}
+      {r.status === "hand_review" && r.hand && <HandReviewPanel r={r} me={me} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} openScores={() => setScoresOpen(true)} />}
+      {r.status === "session_review" && r.finalReview && <SessionReviewPanel r={r} me={me} act={act} busy={busy} />}
+    </>
+  );
 
-  const canFacilitate = r.status === "setup" || r.status === "playing";
+  const canFacilitate = r.status === "setup" || r.status === "playing" || r.status === "hand_review";
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Header
@@ -297,14 +242,10 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
         onBack={() => router.push("/")}
         right={
           <>
-            <IconBtn label="Participants" onClick={() => setPeople(true)}>
-              <span className="relative">
-                <Users size={19} strokeWidth={1.75} />
-                {online < r.players.length && <span className="absolute -top-0.5 -right-1 h-2 w-2 rounded-full bg-[#B4B4B4] ring-2 ring-white" />}
-              </span>
-            </IconBtn>
             <IconBtn label="My Private Coach" onClick={openCoach}><Lock size={19} strokeWidth={1.75} /></IconBtn>
-            <IconBtn label="Menu" onClick={() => setMenu(true)}><MoreHorizontal size={20} strokeWidth={1.75} /></IconBtn>
+            <IconBtn label="Menu" onClick={() => setMenu(true)}>
+              <span className="relative"><MoreHorizontal size={20} strokeWidth={1.75} />{online < r.players.length && <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-dash ring-2 ring-bg" aria-label="A player is offline" />}</span>
+            </IconBtn>
           </>
         }
       >
@@ -312,10 +253,11 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
       </Header>
 
       <main className="flex-1 px-4 py-6 flex flex-col gap-6">
-        <MessageList messages={r.messages.filter((m) => !(m.sender === "system" && /created the room|joined the room/.test(m.text)))} me={me} players={r.players} onDetail={showMsg} onAction={onAction} busy={thinking} />
+        <MessageList messages={r.messages.filter((m) => !(m.sender === "system" && /created the room|joined the room/.test(m.text)))} me={me} players={r.players} onDetail={showMsg} onAction={onAction} onReact={(msgId, reaction) => act({ type: "react", msgId, reaction })} busy={thinking} />
         {thinking && <Typing />}
         {panel}
-        {error && <p className="t-sub text-[#B42318]" role="alert">{error}</p>}
+        {["playing", "hand_review", "session_review"].includes(r.status) && gamePanels}
+        {error && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{error}</p>}
       </main>
 
       <Composer
@@ -328,11 +270,11 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
         above={
           canFacilitate ? (
             <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar">
-              <button onClick={summarize} disabled={thinking} className={cx("h-9 px-3 rounded-full border t-sub shrink-0 flex items-center gap-1.5", openQs >= 2 ? "border-ink text-ink font-medium" : "border-line text-ink")}>
+              <button onClick={summarize} disabled={thinking} className={cx("h-9 px-3 rounded-full border t-sub shrink-0 flex items-center gap-1.5", openQs >= 2 ? "border-green bg-green-soft text-green-text font-medium" : "border-line bg-bg text-ink")}>
                 <ListChecks size={15} strokeWidth={1.75} /> Summarize Questions{openQs ? ` (${openQs})` : ""}
               </button>
               {!r.check && (
-                <button onClick={() => act({ type: "check-start" })} className="h-9 px-3 rounded-full border border-line t-sub shrink-0 flex items-center gap-1.5">
+                <button onClick={() => act({ type: "check-start" })} className="h-9 px-3 rounded-full border border-line bg-bg t-sub text-ink shrink-0 flex items-center gap-1.5 hover:bg-surface">
                   <HelpCircle size={15} strokeWidth={1.75} /> Check Understanding
                 </button>
               )}
@@ -353,6 +295,8 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
       <Sheet open={browse} onClose={() => setBrowse(false)} title="Rule topics">
         <TopicList variant={r.variant} onPick={(id) => { setBrowse(false); onAction({ label: "", type: "followup", topicId: id, facet: "short" }); }} />
       </Sheet>
+      <RecordEventSheet r={r} me={me} open={recordOpen} onClose={() => { setRecordOpen(false); setRevise(null); }} act={act} busy={busy} revise={revise} />
+      <ScoresSheet r={r} me={me} open={scoresOpen} onClose={() => setScoresOpen(false)} />
 
       <Sheet open={people} onClose={() => setPeople(false)} title="Participants">
         <ul className="flex flex-col gap-3">
@@ -375,6 +319,7 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         <div className="flex flex-col gap-3">
+          <Btn variant="secondary" onClick={() => { setMenu(false); setPeople(true); }}><Users size={16} strokeWidth={1.75} /> Participants · {online}/{r.players.length} connected</Btn>
           {variant && <Btn variant="secondary" onClick={() => { setMenu(false); reviewRules(); }}><BookOpen size={16} strokeWidth={1.75} /> Rule guide</Btn>}
           <p className="t-sub text-muted">
             Room {r.code}. Answers come from the built-in Mahjong Rule Assistant — prepared, sourced rule notes matched to your question. It isn't a generative AI, and no questions are sent to any AI service.
@@ -399,14 +344,14 @@ function VariantPanel({ r, me, act, showVariant, busy }: { r: PublicRoom; me: st
         <div className="t-section">Choose a variant</div>
         <Count n={voted.length} label="Selected" />
       </div>
-      <ul className="flex flex-col divide-y divide-line -mx-1">
+      <ul className="flex flex-col gap-2">
         {VARIANTS.map((v) => {
           const mine = r.votes[me] === v.id;
           const voters = r.players.filter((p) => r.votes[p.id] === v.id);
           return (
-            <li key={v.id} className="py-3 px-1">
+            <li key={v.id} className={cx("p-3 rounded-[14px] border", mine ? "border-green bg-green-soft" : "border-line bg-bg")}>
               <button disabled={busy} onClick={() => act({ type: "vote", variant: v.id })} className="w-full text-left flex gap-3" aria-pressed={mine}>
-                <span className={cx("mt-0.5 h-5 w-5 rounded-full border shrink-0 flex items-center justify-center", mine ? "bg-ink border-ink text-white" : "border-[#CFCFCF]")}>
+                <span className={cx("mt-0.5 h-5 w-5 rounded-full border shrink-0 flex items-center justify-center", mine ? "bg-green border-green text-white" : "border-dash bg-bg")}>
                   {mine && <Check size={12} strokeWidth={3} />}
                 </span>
                 <span className="flex-1 min-w-0">
@@ -416,7 +361,7 @@ function VariantPanel({ r, me, act, showVariant, busy }: { r: PublicRoom; me: st
                 </span>
               </button>
               <div className="flex items-center justify-between gap-2 mt-1.5 pl-8">
-                <button onClick={() => showVariant(v)} className="t-sub text-muted underline underline-offset-4 decoration-line min-h-9 text-left">Rules &amp; Cultural Background</button>
+                <button onClick={() => showVariant(v)} className="t-sub font-medium text-green-text min-h-9 text-left hover:underline underline-offset-4">Rules &amp; Cultural Background</button>
                 <span className="t-meta text-muted truncate">{voters.map((p) => p.name).join(", ")}</span>
               </div>
             </li>
@@ -453,7 +398,7 @@ function CheckPanel({ r, me, act, onAction, viewRule, busy }: { r: PublicRoom; m
   return (
     <Panel label="Understanding check">
       <div className="flex flex-col gap-0.5">
-        <span className={cx("t-meta font-medium", Object.values(c.resp).filter((v) => v === "yes").length === 4 ? "text-ok" : "text-muted")} aria-live="polite">{Object.values(c.resp).filter((v) => v === "yes").length} of 4 Understand</span>
+        <Count n={Object.values(c.resp).filter((v) => v === "yes").length} label="Understand" />
         <div className="t-section">{c.round > 1 ? "Does Everyone Understand Now?" : "Does Everyone Understand?"}</div>
       </div>
       <p className="t-sub text-muted -mt-2">{c.topic}. We'll continue only when everyone understands.</p>
@@ -489,8 +434,8 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: Pub
   const dealer = r.players.find((p) => p.id === r.dealerId);
   const helpRow = (
     <div className="flex gap-1 flex-wrap border-t border-line pt-2 -mx-2">
-      <button disabled={busy} onClick={explain} className="t-sub min-h-10 px-2 rounded-full flex items-center gap-1.5 hover:bg-surface disabled:opacity-40"><HelpCircle size={16} strokeWidth={1.75} /> Need an Explanation?</button>
-      <button onClick={focus} className="t-sub min-h-10 px-2 rounded-full flex items-center gap-1.5 hover:bg-surface"><Users size={16} strokeWidth={1.75} /> Ask the Group</button>
+      <button disabled={busy} onClick={explain} className="t-sub font-medium text-green-text min-h-11 px-2 rounded-full flex items-center gap-1.5 hover:bg-green-soft disabled:text-disabled-text"><HelpCircle size={16} strokeWidth={1.75} /> Need an Explanation?</button>
+      <button onClick={focus} className="t-sub font-medium text-green-text min-h-11 px-2 rounded-full flex items-center gap-1.5 hover:bg-green-soft"><Users size={16} strokeWidth={1.75} /> Ask the Group</button>
     </div>
   );
   const head = (label: string, n?: number, nLabel?: string) => (
@@ -501,7 +446,7 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: Pub
       </div>
       <div className="t-section">{label}</div>
       <div className="flex gap-1 mt-1" aria-hidden>
-        {steps.map((s, i) => <span key={s.id} className={cx("h-1 flex-1 rounded-full", i < idx ? "bg-ok" : i === idx ? "bg-ink" : "bg-line")} />)}
+        {steps.map((s, i) => <span key={s.id} className={cx("h-1 flex-1 rounded-full", i < idx ? "bg-green" : i === idx ? "bg-green-strong" : "bg-line")} />)}
       </div>
     </div>
   );
@@ -553,7 +498,7 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: Pub
         <Statuses players={r.players} value={(p) => (r.dice[p.id] !== undefined ? String(r.dice[p.id]) : contenders.includes(p.id) ? undefined : "—")} labels={{}} />
         {myTurn ? (
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); act({ type: "dice", value: Number(total) }); setTotal(""); }}>
-            <input type="number" inputMode="numeric" min={2} max={12} value={total} onChange={(e) => setTotal(e.target.value)} placeholder="Your total (2–12)" aria-label="Your dice total" className="flex-1 min-w-0 h-11 px-4 rounded-full border border-line outline-none focus:border-ink" />
+            <input type="number" inputMode="numeric" min={2} max={12} value={total} onChange={(e) => setTotal(e.target.value)} placeholder="Your total (2–12)" aria-label="Your dice total" className="flex-1 min-w-0 h-11 px-4 rounded-full border border-line outline-none focus:border-green" />
             <Btn type="submit" disabled={busy || !(Number(total) >= 2 && Number(total) <= 12)}>Submit</Btn>
           </form>
         ) : (
@@ -569,7 +514,7 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: Pub
           <span className="t-meta text-muted">{label}</span>
           <div className="grid grid-cols-6 gap-1">
             {[1, 2, 3, 4, 5, 6].map((n) => (
-              <button key={n} type="button" onClick={() => set(n)} aria-pressed={val === n} className={cx("h-11 rounded-lg border t-btn", val === n ? "bg-ink text-white border-ink" : "border-line")}>{n}</button>
+              <button key={n} type="button" onClick={() => set(n)} aria-pressed={val === n} className={cx("h-11 rounded-lg border t-btn", val === n ? "bg-green-strong text-white border-green-strong shadow-btn" : "border-line bg-bg hover:bg-surface")}>{n}</button>
             ))}
           </div>
         </div>
@@ -596,7 +541,7 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details }: { r: Pub
   return (
     <Panel label={step.title}>
       {body}
-      <button onClick={details} className="self-start t-sub text-muted underline underline-offset-4 decoration-line min-h-8">Detailed instructions</button>
+      <button onClick={details} className="self-start t-sub font-medium text-green-text min-h-8 hover:underline underline-offset-4">Detailed instructions</button>
       {helpRow}
     </Panel>
   );
@@ -624,7 +569,8 @@ function compress(file: File): Promise<string> {
   });
 }
 
-function Coach({ r, me, onBack }: { r: PublicRoom; me: string; onBack: () => void }) {
+function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () => void; act: Actions["act"] }) {
+  const [checkOpen, setCheckOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[] | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [imgQ, setImgQ] = useState("");
@@ -664,6 +610,14 @@ function Coach({ r, me, onBack }: { r: PublicRoom; me: string; onBack: () => voi
     else if (a.type === "browse") setBrowse(true);
     else inputRef.current?.focus();
   };
+  const react = async (msgId: string, reaction: string | null) => {
+    try {
+      const j = await api(`/api/rooms/${r.code}/private`, { mode: "react", msgId, reaction });
+      setMsgs(j.messages);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -689,10 +643,11 @@ function Coach({ r, me, onBack }: { r: PublicRoom; me: string; onBack: () => voi
           <div className="t-section">Ask privately</div>
           <Prose text={`I'm your private Rule Assistant. Ask about ${variant ? variant.name : "Mahjong"} rules or general strategy without sharing it with the table. I can't see your tiles, so describe them in text if you want help thinking a decision through.`} />
           <p className="t-meta text-muted flex items-start gap-1.5"><Lock size={12} strokeWidth={2} className="mt-[3px] shrink-0" /> Your private messages are tied to your seat on this device. The host and other players can't open them.</p>
+          {r.status === "playing" && <Btn variant="secondary" className="self-start mt-1" onClick={() => setCheckOpen(true)}>Check My Hand</Btn>}
         </div>
-        {msgs === null ? <p className="t-sub text-muted">Loading…</p> : <MessageList messages={msgs} me={me} onDetail={setDetail} onAction={onAction} busy={thinking} />}
+        {msgs === null ? <p className="t-sub text-muted">Loading…</p> : <MessageList messages={msgs} me={me} onDetail={setDetail} onAction={onAction} onReact={react} busy={thinking} />}
         {thinking && <Typing />}
-        {err && <p className="t-sub text-[#B42318]" role="alert">{err}</p>}
+        {err && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{err}</p>}
       </main>
       <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
@@ -705,13 +660,13 @@ function Coach({ r, me, onBack }: { r: PublicRoom; me: string; onBack: () => voi
         disabledText="This session has ended."
         leading={<>{tool("Upload Photo", <ImagePlus size={19} strokeWidth={1.75} />, () => uploadRef.current?.click())}{tool("Use Camera", <Camera size={19} strokeWidth={1.75} />, () => cameraRef.current?.click())}</>}
         above={image ? (
-          <div className="mb-2 p-3 bg-white border border-line rounded-2xl flex flex-col gap-2">
+          <div className="mb-2 p-3 bg-bg border border-line rounded-2xl flex flex-col gap-2">
             <div className="flex gap-3 items-start">
               <img src={image} alt="Your selected photo" className="max-h-28 max-w-[45%] w-auto rounded-lg border border-line object-contain" />
               <p className="flex-1 t-meta text-muted">Photo analysis is not available in this free demo. You can describe your tiles using text instead. The photo stays on your phone.</p>
               <button onClick={() => setImage(null)} aria-label="Remove photo" className="h-9 w-9 -mt-1 -mr-1 rounded-full flex items-center justify-center hover:bg-surface"><X size={18} /></button>
             </div>
-            <input value={imgQ} onChange={(e) => setImgQ(e.target.value)} placeholder="Optional question about your tiles" className="h-11 px-3 rounded-xl border border-line outline-none focus:border-ink" />
+            <input value={imgQ} onChange={(e) => setImgQ(e.target.value)} placeholder="Optional question about your tiles" className="h-11 px-3 rounded-xl border border-line outline-none focus:border-green" />
             <Btn disabled={thinking} onClick={() => { setImage(null); post({ photo: true, question: imgQ }, imgQ || "Can you look at my tiles?", true); setImgQ(""); }}><Sparkles size={16} strokeWidth={1.75} /> Ask About This Photo</Btn>
           </div>
         ) : null}
@@ -722,6 +677,9 @@ function Coach({ r, me, onBack }: { r: PublicRoom; me: string; onBack: () => voi
       <Sheet open={browse} onClose={() => setBrowse(false)} title="Rule topics">
         <TopicList variant={r.variant} onPick={(id) => { setBrowse(false); onAction({ label: entryById(id)?.topic || "Explain", type: "followup", topicId: id, facet: "short" }); }} />
       </Sheet>
+      <CheckMyHand r={r} me={me} open={checkOpen} onClose={() => setCheckOpen(false)} onDeclare={async (claim, idem) => {
+        try { await act({ type: "event-submit", eventType: "win", idem, claim }); onBack(); } catch (e) { setErr((e as Error).message); }
+      }} />
     </div>
   );
 }
@@ -732,39 +690,17 @@ function Complete({ r, me, actions }: { r: PublicRoom; me: string; actions: Acti
   const [text, setText] = useState(r.reflections[me] || "");
   const [saved, setSaved] = useState(false);
   const { busy, run } = useBusy();
-  const variant = variantById(r.variant);
-  const shared = useMemo(() => r.players.filter((p) => r.reflections[p.id]), [r]);
-  return (
-    <div className="min-h-[100dvh] flex flex-col pt-safe">
-      <div className="h-14 px-4 flex items-center t-app">Mahjong Together</div>
-      <main className="flex-1 px-4 py-6 flex flex-col gap-8">
-        <div>
-          <div className="h-10 w-10 rounded-full border border-ok text-ok flex items-center justify-center mb-4"><Check size={22} strokeWidth={2} /></div>
-          <h1 className="t-app">Session Complete!</h1>
-          <p className="t-body text-muted mt-1">Thanks for learning and playing together.</p>
-          <p className="t-meta text-muted mt-2">{r.name} · {variant?.name} · This session has ended.</p>
-        </div>
-        <section className="flex flex-col gap-2">
-          <label htmlFor="refl" className="t-section">What did you discover today?</label>
-          <p className="t-sub text-muted -mt-1">Optional. Shared with your group.</p>
-          <textarea id="refl" rows={3} value={text} onChange={(e) => { setText(e.target.value); setSaved(false); }} className="rounded-xl border border-line px-3 py-2 outline-none focus:border-ink resize-none t-body" placeholder="One rule I learned, something that surprised me, what I'd like to explore next…" />
-          <Btn variant="secondary" disabled={busy} onClick={() => run(async () => { await actions.act({ type: "reflect", text }); setSaved(true); })}>{saved ? <><Check size={16} className="text-ok" /> Saved</> : "Share Reflection"}</Btn>
-        </section>
-        {shared.length > 0 && (
-          <section className="flex flex-col gap-4">
-            <div className="t-section">Group reflections</div>
-            {shared.map((p) => (
-              <div key={p.id} className="flex flex-col gap-1">
-                <div className="t-meta text-muted">{p.name}</div>
-                <div className="t-body whitespace-pre-wrap">{r.reflections[p.id]}</div>
-              </div>
-            ))}
-          </section>
-        )}
-      </main>
-      <div className="sticky bottom-0 bg-white px-4 pt-3 pb-safe border-t border-line">
-        <Btn className="w-full" onClick={() => router.push("/")}>Back to Home</Btn>
-      </div>
-    </div>
+  const shared = r.players.filter((p) => r.reflections[p.id]);
+  const reflection = (
+    <section className="flex flex-col gap-2">
+      <label htmlFor="refl" className="t-section">What did you discover today?</label>
+      <p className="t-sub text-muted -mt-1">Optional. Shared with your group.</p>
+      <textarea id="refl" rows={3} value={text} onChange={(e) => { setText(e.target.value); setSaved(false); }} className="rounded-xl border border-line bg-bg px-3 py-2 outline-none focus:border-green resize-none t-body" placeholder="One rule I learned, something that surprised me…" />
+      <Btn variant="secondary" disabled={busy} onClick={() => run(async () => { await actions.act({ type: "reflect", text }); setSaved(true); })}>{saved ? <><Check size={16} className="text-green" /> Saved</> : "Share Reflection"}</Btn>
+      {shared.map((p) => (
+        <div key={p.id} className="flex flex-col gap-0.5 pt-2"><div className="t-meta text-muted">{p.name}</div><div className="t-body whitespace-pre-wrap">{r.reflections[p.id]}</div></div>
+      ))}
+    </section>
   );
+  return <FinalResults r={r} me={me} onHome={() => router.push("/")} reflection={reflection} />;
 }

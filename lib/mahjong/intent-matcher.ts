@@ -62,7 +62,7 @@ export const asksCurrentStep = (n: Norm) => CURRENT.some((c) => hit(n, c));
 export const isPrediction = (n: Norm) => /\b(who (will|is going to|gonna) win|predict|going to win|lucky)\b/.test(n.pad) || hit(n, "谁会赢");
 export const isOffTopic = (n: Norm) => /\b(weather|forecast|stock|news|movie|recipe|homework|football|basketball|bitcoin|president)\b/.test(n.pad) || ["天气", "股票", "新闻"].some((c) => hit(n, c));
 export const isHandStrategy = (n: Norm) =>
-  /\b(which (exact )?tile should i (discard|throw|play|keep)|what (tile )?should i (discard|throw)|best (move|discard|tile)|should i (keep|discard|throw|break)|what should i keep|my (hand|tiles))\b/.test(n.pad) || ["打哪张", "出哪张", "该打什么"].some((c) => hit(n, c));
+  /\b(which (exact )?tile should i (discard|throw|play|keep)|what (tile )?should i (discard|throw)|best (move|discard|tile)|should i (keep|discard|throw|break)|what should i keep)\b/.test(n.pad) || ["打哪张", "出哪张", "该打什么"].some((c) => hit(n, c));
 
 export interface Scored { entry: RuleEntry; score: number; facetId?: string }
 

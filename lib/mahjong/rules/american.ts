@@ -96,4 +96,12 @@ export const AMERICAN: RuleEntry[] = [
     detail: "The Charleston is American Mah Jongg's own passing ritual and follows different rules from Sichuan's exchange.",
     source: S,
   },
+  {
+    id: "am-scoring", variant: "american", ruleset: R, topic: "American scoring", ruleType: "mandatory",
+    examples: ["How does scoring work?"],
+    keywords: ["score", "scoring", "points", "payment", "pay", "who pays", "value"],
+    short: "Each hand on the current NMJL card has a printed value, and self-draws and jokerless hands change payments. This app doesn't reproduce the card, so enter each payer → recipient transfer from your card for the group to verify.",
+    detail: "Use Record Event → manual transfers. Game points only; no money.",
+    source: S,
+  },
 ];
