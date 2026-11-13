@@ -9,7 +9,7 @@ import { FourPlayerStatus } from "@/components/s3/FourPlayerStatus";
 import { WaitingProgressRing } from "@/components/ui/loader-15";
 
 type Member = { name: string; avatar: string; me: boolean };
-type S = { status: "none" | "waiting" | "matched"; filled?: number; code?: string; members?: Member[]; canFill?: boolean; queue?: string };
+type S = { status: "none" | "waiting" | "matched"; filled?: number; code?: string; members?: Member[]; deadlineInMs?: number; queue?: string };
 
 // One join request per page load, even when React mounts the effect twice in development.
 let inflight: { at: number; key: string; p: Promise<S> } | null = null;
@@ -31,7 +31,8 @@ function Match() {
   const qs = queue === "class" ? "?queue=class" : "";
   // Scanning the classroom QR again while already seated at an active table: offer to resume instead of re-queueing.
   const [resume, setResume] = useState<string | null | undefined>(queue === "class" ? undefined : null);
-  const [filling, setFilling] = useState(false);
+  // Countdown from the SERVER's remaining time (resynced on every poll; display only).
+  const [left, setLeft] = useState<number | null>(null);
   useEffect(() => {
     if (queue !== "class") return;
     const code = lastRoom();
@@ -61,7 +62,9 @@ function Match() {
         api(`/api/rooms/${code}`).then((rj) => {
           if (rj?.room) { me.current = rj.me; setPlayers(rj.room.players); }
           setComplete(true);
-          window.setTimeout(() => router.replace(`/room/${code}`), 650);
+          // demo seats pop in one by one (200ms apart) — after matching; never delays the matching deadline
+          const bots = (rj?.room?.players || []).filter((x: PublicPlayer) => x.kind === "virtual").length;
+          window.setTimeout(() => router.replace(`/room/${code}`), 650 + bots * 200);
         }).catch(() => router.replace(`/room/${code}`));
         return true;
       }
@@ -86,10 +89,14 @@ function Match() {
     return () => { stop.current = true; clearTimeout(timer); };
   }, [router, queue, qs, resume]);
 
-  const fill = async () => {
-    setFilling(true);
-    try { setS(await api<S>("/api/match", { queue, fill: true })); } catch (e) { setErr((e as Error).message); } finally { setFilling(false); }
-  };
+  useEffect(() => {
+    if (s.status !== "waiting" || typeof s.deadlineInMs !== "number") { setLeft(null); return; }
+    const end = Date.now() + s.deadlineInMs;
+    const tick = () => setLeft(Math.max(0, Math.ceil((end - Date.now()) / 1000)));
+    tick();
+    const t = window.setInterval(tick, 250);
+    return () => window.clearInterval(t);
+  }, [s]);
 
   const cancel = async () => {
     if (complete) return;
@@ -129,11 +136,8 @@ function Match() {
         <FourPlayerStatus className="w-full" players={players} me={me.current} showOpenSeats animateIn doneLabel="Joined"
           state={() => "waiting"} labelFor={() => (complete ? "Matched" : "Joined")} />
         <p className="t-sub text-muted" aria-live="polite">{complete ? "4/4 Matched · opening your table" : queue === "class" ? "Waiting for classmates to join…" : "Looking for available players"}</p>
-        {queue === "class" && !complete && s.canFill && (
-          <div className="w-full rounded-[16px] bg-card border border-line p-4 flex flex-col gap-2">
-            <p className="t-sub">Still waiting? Complete your table with demo players.</p>
-            <Btn variant="secondary" disabled={filling} onClick={fill}>Fill With Demo Players</Btn>
-          </div>
+        {queue === "class" && !complete && left !== null && (s.filled || 0) < 4 && (
+          <p className="t-meta text-muted -mt-4 tabular-nums" aria-live="off">{left > 0 ? `Empty seats are filled with demo players in ${left}s` : "Filling empty seats…"}</p>
         )}
         {complete && players.some((p) => p.kind === "virtual") && <p className="t-meta text-muted -mt-4">This demo includes simulated participants.</p>}
         {err && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{err}</p>}

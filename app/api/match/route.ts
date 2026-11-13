@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { cancel, enqueue, poll, queueCookie, queueName, requestFill, type MatchStatus, type QueueName } from "@/lib/server/match";
+import { cancel, enqueue, poll, queueCookie, queueName, type MatchStatus, type QueueName } from "@/lib/server/match";
 import { fail, setSessionCookie, NO_STORE } from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
@@ -32,14 +32,12 @@ export async function GET(req: Request) {
   }
 }
 
-// { queue, name, avatar } joins (or resumes) a queue; { cancel: true } leaves it; { fill: true } (class queue,
-// after the window) completes the caller's group with demo seats.
+// { queue, name, avatar } joins (or resumes) a queue; { cancel: true } leaves it.
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const q = queueName(body.queue);
     if (body.cancel) return await reply(await cancel(q, await readCookie(q)));
-    if (body.fill) return await reply(await requestFill(q, await readCookie(q)));
     const { cookie } = await enqueue(q, await readCookie(q), body.name, body.avatar);
     if (cookie) await setQueueCookie(q, cookie);
     return await reply(await poll(q, cookie || (await readCookie(q))));

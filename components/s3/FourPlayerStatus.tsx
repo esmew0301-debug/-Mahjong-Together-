@@ -54,7 +54,8 @@ export function FourPlayerStatus({ players, me, state, doneLabel, aiDoneLabel, c
           // No repeated "AI" tag under each avatar; screens with demo seats show one short disclosure instead.
           const sub = p.id === me ? `You · ${label}` : label;
           return (
-            <li key={`${i}-${p.name}`} className={cx("flex flex-col items-center min-w-0 text-center", animateIn && "mt-pop")} aria-label={`${p.name}${ai ? ", simulated participant" : ""}${p.id === me ? " (you)" : ""}: ${label}`}>
+            <li key={`${i}-${p.name}`} className={cx("flex flex-col items-center min-w-0 text-center", animateIn && "mt-pop")}
+              style={animateIn && ai ? { animationDelay: `${slots.slice(0, i).filter((x) => x?.kind === "virtual").length * 200}ms` } : undefined} aria-label={`${p.name}${ai ? ", simulated participant" : ""}${p.id === me ? " (you)" : ""}: ${label}`}>
               <span className="relative" aria-hidden>
                 <span className={cx("h-[52px] w-[52px] max-[359px]:h-11 max-[359px]:w-11 rounded-full bg-card border-2 flex items-center justify-center transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)]", done ? "border-green" : "border-line")}>
                   <span style={{ ...EMOJI_FONT, fontSize: 28, lineHeight: 1 }}>{emojiFor(p)}</span>
