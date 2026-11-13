@@ -43,7 +43,7 @@ export default function Home() {
         <AnimatedMahjongTile width={132} />
       </div>
       <div className="flex flex-col gap-3 pb-3">
-        <Btn onClick={() => router.push("/profile?next=match")}>Random Match</Btn>
+        <Btn onClick={() => router.push("/present")}>Random Match</Btn>
         <Btn variant="secondary" onClick={() => router.push("/profile?next=join")}>Join a Room</Btn>
         {recent && <button onClick={() => router.push(`/room/${recent}`)} className="t-sub text-muted min-h-11">Return to Room {recent}</button>}
       </div>

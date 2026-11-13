@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { QUEUE_COOKIE, cancel, enqueue, poll, type MatchStatus } from "@/lib/server/match";
+import { cancel, enqueue, poll, queueCookie, queueName, requestFill, type MatchStatus, type QueueName } from "@/lib/server/match";
 import { fail, setSessionCookie, NO_STORE } from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
@@ -13,32 +13,36 @@ async function reply(s: MatchStatus) {
   return NextResponse.json(s, { headers: NO_STORE });
 }
 
-const queueCookie = async () => (await cookies()).get(QUEUE_COOKIE)?.value;
+const readCookie = async (q: QueueName) => (await cookies()).get(queueCookie(q))?.value;
 
-async function setQueueCookie(v: string) {
-  (await cookies()).set(QUEUE_COOKIE, v, {
+async function setQueueCookie(q: QueueName, v: string) {
+  (await cookies()).set(queueCookie(q), v, {
     httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60,
     secure: process.env.NODE_ENV === "production" && process.env.MT_INSECURE_COOKIE !== "1",
   });
 }
 
-// Poll the caller's own queue entry.
-export async function GET() {
+// Poll the caller's own queue entry (?queue=class for the shared classroom QR queue).
+export async function GET(req: Request) {
   try {
-    return await reply(await poll(await queueCookie()));
+    const q = queueName(new URL(req.url).searchParams.get("queue"));
+    return await reply(await poll(q, await readCookie(q)));
   } catch (e) {
     return fail(e);
   }
 }
 
-// { name, avatar } joins (or resumes) the queue; { cancel: true } leaves it.
+// { queue, name, avatar } joins (or resumes) a queue; { cancel: true } leaves it; { fill: true } (class queue,
+// after the window) completes the caller's group with demo seats.
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    if (body.cancel) return await reply(await cancel(await queueCookie()));
-    const { cookie } = await enqueue(await queueCookie(), body.name, body.avatar);
-    if (cookie) await setQueueCookie(cookie);
-    return await reply(await poll(cookie || (await queueCookie())));
+    const q = queueName(body.queue);
+    if (body.cancel) return await reply(await cancel(q, await readCookie(q)));
+    if (body.fill) return await reply(await requestFill(q, await readCookie(q)));
+    const { cookie } = await enqueue(q, await readCookie(q), body.name, body.avatar);
+    if (cookie) await setQueueCookie(q, cookie);
+    return await reply(await poll(q, cookie || (await readCookie(q))));
   } catch (e) {
     return fail(e);
   }

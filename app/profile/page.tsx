@@ -12,6 +12,7 @@ function ProfileForm() {
   const sp = useSearchParams();
   const next = sp.get("next") === "join" ? "join" : "match";
   const code = (sp.get("code") || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 8); // QR target room is kept
+  const queue = sp.get("queue") === "class" ? "class" : ""; // classroom QR: keep the shared-queue intent
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState<string>(AVATAR_OPTIONS[0].id);
   const [err, setErr] = useState<string | null>(null);
@@ -24,7 +25,7 @@ function ProfileForm() {
     const n = name.replace(/\s+/g, " ").trim();
     if (!n) return setErr("Enter a name to continue.");
     saveProfile({ name: n, avatar });
-    if (next === "match") router.push("/match");
+    if (next === "match") router.push(queue ? `/match?queue=${queue}` : "/match");
     else router.push(code ? `/join/${code}?auto=1` : "/join");
   };
 
