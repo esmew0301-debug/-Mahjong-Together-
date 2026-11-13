@@ -8,9 +8,12 @@ import { api, forgetRoom, openQuestionCount, rememberRoom, useRoom } from "@/lib
 import type { GameEvent, Msg, MsgAction, PublicPlayer, PublicRoom } from "@/lib/types";
 import { EndProposalPanel, EventCard, FinalResults, GameBar, HandReviewPanel, ReconcilePanel, RecordEventSheet, ScoresSheet, SessionReviewPanel, describeEvent, topicForEvent } from "./Game";
 import { CheckMyHand } from "./CheckMyHand";
+import { S3Room } from "./s3/S3Room";
 import { topicsForBrowse } from "@/lib/mahjong/assistant";
 import { entryById } from "@/lib/mahjong/intent-matcher";
-import { VARIANTS, fill, stepById, variantById, visibleSteps, type Step, type Variant } from "@/lib/variants";
+import { VARIANTS, breakInstruction, fill, stepById, variantById, visibleSteps, type Step, type Variant } from "@/lib/variants";
+import { STEP_UI } from "@/lib/tutorial/step-ui";
+import { TutorialVisual } from "./tutorial/TutorialVisual";
 import { Avatar, Btn, Composer, Count, Header, IconBtn, MessageList, NewMessagesPill, Panel, Prose, Sheet, Statuses, Typing, cx, useChatScroll } from "./ui";
 import { Confetti, type ConfettiRef } from "./ui/confetti";
 import { useReducedMotion } from "motion/react";
@@ -66,6 +69,12 @@ export function RoomApp({ code }: { code: string }) {
     return <div className="min-h-[100dvh] flex items-center justify-center t-sub text-muted">Connecting to the room…</div>;
 
   const { room: r, me } = room.data;
+  if (r.flow === "s3") {
+    // Final Sichuan product flow. The Private AI Assistant (Coach) is reused exactly as before.
+    if (r.status === "complete") return <FinalResults r={r} me={me} onHome={() => { forgetRoom(r.code); router.push("/"); }} reflection={null} />;
+    if (view === "coach") return <div className="coach-classic"><Coach r={r} me={me} onBack={() => setView("table")} act={room.act} /></div>;
+    return <S3Room data={room.data} actions={room} openCoach={() => setView("coach")} />;
+  }
   if (r.status === "lobby") return <Lobby r={r} me={me} actions={room} />;
   if (r.status === "complete") return <Complete r={r} me={me} actions={room} />;
   if (view === "coach") return <Coach r={r} me={me} onBack={() => setView("table")} act={room.act} />;
@@ -219,6 +228,14 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
   const summarize = () => run(async () => { setThinking(true); try { await actions.summarize(); } finally { setThinking(false); } });
   const act = (a: Record<string, unknown>) => run(() => actions.act(a));
   const [browse, setBrowse] = useState(false);
+  const [help, setHelp] = useState(false);
+  const helpStep = useRef<string | null>(null);
+  useEffect(() => {
+    // informational status only; never touches confirmations
+    if (help && step) { helpStep.current = step.id; actions.act({ type: "step-help", stepId: step.id, open: true }).catch(() => {}); }
+    else if (!help && helpStep.current) { const id = helpStep.current; helpStep.current = null; actions.act({ type: "step-help", stepId: id, open: false }).catch(() => {}); }
+  }, [help]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (help && step && helpStep.current && helpStep.current !== step.id) setHelp(false); }, [step?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [recordOpen, setRecordOpen] = useState(false);
   const [revise, setRevise] = useState<GameEvent | null>(null);
   const [scoresOpen, setScoresOpen] = useState(false);
@@ -248,7 +265,7 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
   let panel: React.ReactNode = null;
   if (r.status === "variant") panel = <VariantPanel r={r} me={me} act={act} showVariant={showVariant} busy={busy} />;
   else if (r.check) panel = <CheckPanel r={r} me={me} act={act} onAction={onAction} viewRule={viewRule} busy={busy || thinking} />;
-  else if (r.status === "setup" && step) panel = <StepPanel r={r} me={me} step={step} act={act} explain={() => onAction({ label: "", type: "current" })} busy={busy || thinking} focus={() => inputRef.current?.focus()} details={() => setDetail({ title: step.title, body: fill(step.detail, r.decisions), source: step.source })} showExample={() => setDetail({ title: `Example: ${step.title}`, body: step.example || "", source: step.source })} />;
+  else if (r.status === "setup" && step) panel = <StepPanel r={r} me={me} step={step} act={act} busy={busy || thinking} onHelp={() => setHelp(true)} />;
   const gamePanels = (
     <>
       {pendingEvents.map((e) => (
@@ -307,7 +324,7 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
               <button onClick={summarize} disabled={thinking} className={cx("h-9 px-3 rounded-full border t-sub shrink-0 flex items-center gap-1.5", openQs >= 2 ? "border-green bg-green-soft text-green-text font-medium" : "border-line bg-bg text-ink")}>
                 <ListChecks size={15} strokeWidth={1.75} /> Summarize Questions{openQs ? ` (${openQs})` : ""}
               </button>
-              {!r.check && (
+              {!r.check && r.status !== "setup" && (
                 <button onClick={() => act({ type: "check-start" })} className="h-9 px-3 rounded-full border border-line bg-bg t-sub text-ink shrink-0 flex items-center gap-1.5 hover:bg-surface">
                   <HelpCircle size={15} strokeWidth={1.75} /> Check Understanding
                 </button>
@@ -337,6 +354,7 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
           <Btn disabled={busy || !canEnd} onClick={() => { setEndConfirm(false); act({ type: "end-propose" }); }}>Request to End Game</Btn>
         </div>
       </Sheet>
+      <StepHelpSheet r={r} step={step} open={help} onClose={() => setHelp(false)} />
       <RecordEventSheet r={r} me={me} open={recordOpen} onClose={() => { setRecordOpen(false); setRevise(null); }} act={act} busy={busy} revise={revise} />
       <ScoresSheet r={r} me={me} open={scoresOpen} onClose={() => setScoresOpen(false)} />
 
@@ -446,7 +464,7 @@ function CheckPanel({ r, me, act, onAction, viewRule, busy }: { r: PublicRoom; m
       </div>
       <p className="t-sub text-muted -mt-2">{c.topic}. We'll continue only when everyone understands.</p>
       <Statuses players={r.players} value={(p) => c.resp[p.id]} labels={{ yes: { text: "Understands", ok: true }, no: { text: "Needs clarification" } }} />
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2">
         <Btn variant={mine === "yes" ? "ok" : "primary"} disabled={busy || mine === "yes"} onClick={() => act({ type: "check", value: "yes" })}>{mine === "yes" ? <><Check size={16} /> I understand</> : <span className="whitespace-nowrap">I Understand</span>}</Btn>
         <Btn variant={mine === "no" ? "chosen" : "secondary"} className="px-2 text-[14px] whitespace-nowrap" disabled={busy || mine === "no"} onClick={() => act({ type: "check", value: "no" })}>Need Explanation</Btn>
       </div>
@@ -467,43 +485,41 @@ function CheckPanel({ r, me, act, onAction, viewRule, busy }: { r: PublicRoom; m
   );
 }
 
-function StepPanel({ r, me, step, act, explain, busy, focus, details, showExample }: { r: PublicRoom; me: string; step: Step; act: (a: Record<string, unknown>) => void; explain: () => void; busy: boolean; focus: () => void; details: () => void; showExample: () => void }) {
+/**
+ * Tutorial UX 2.0 — ONE shared step card per step.
+ * Title · one-sentence instruction · visual demonstration · Need Explanation · single confirmation · "n / 4 Ready".
+ * Need Explanation opens help for this player only and never changes anyone's confirmation.
+ */
+function StepPanel({ r, me, step, act, busy, onHelp }: { r: PublicRoom; me: string; step: Step; act: (a: Record<string, unknown>) => void; busy: boolean; onHelp: () => void }) {
   const [total, setTotal] = useState<string>("");
   const [d1, setD1] = useState<number | null>(null);
   const [d2, setD2] = useState<number | null>(null);
   const steps = visibleSteps(step.variant, r.decisions);
   const idx = steps.findIndex((s) => s.id === step.id);
+  const ui = STEP_UI[step.id];
+  const instruction = ui ? fill(ui.instruction, r.decisions) : fill(step.short, r.decisions);
   const mine = r.resp[me];
   const dealer = r.players.find((p) => p.id === r.dealerId);
-  const helpRow = (
-    <div className="flex gap-1 flex-wrap border-t border-line pt-2 -mx-2">
-      <button disabled={busy} onClick={explain} className="t-sub font-medium text-green-text min-h-11 px-2 rounded-full flex items-center gap-1.5 hover:bg-green-soft disabled:text-disabled-text"><HelpCircle size={16} strokeWidth={1.75} /> Need an Explanation?</button>
-      <button onClick={focus} className="t-sub font-medium text-green-text min-h-11 px-2 rounded-full flex items-center gap-1.5 hover:bg-green-soft"><Users size={16} strokeWidth={1.75} /> Ask the Group</button>
-    </div>
-  );
-  const head = (label: string, n?: number, nLabel?: string) => (
-    <div className="flex flex-col gap-0.5">
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const readyCount = r.players.filter((p) => r.resp[p.id] === "ready").length;
+  const statusOf = (pid: string) => (r.resp[pid] === "ready" ? "ready" : r.viewing?.[pid] ? "viewing" : undefined);
+  const confirmLabel = ui?.action === "ready" || step.kind === "review" ? "I'm Ready" : step.kind === "begin" ? "I'm Ready to Play" : "I've Done This";
+
+  const confirmArea = (
+    <div className="flex flex-col gap-3 border-t border-line pt-3">
+      <div className="grid grid-cols-1 min-[360px]:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-2">
+        <Btn variant="secondary" className="order-2 min-[360px]:order-1 px-2 text-[14px] whitespace-nowrap" onClick={onHelp}>Need Explanation</Btn>
+        <Btn variant={mine === "ready" ? "ok" : "primary"} className="order-1 min-[360px]:order-2 px-2 whitespace-nowrap" disabled={busy || mine === "ready"}
+          onClick={() => act({ type: "respond", stepId: step.id, value: "ready" })}>
+          {mine === "ready" ? <><Check size={16} /> Ready</> : confirmLabel}
+        </Btn>
+      </div>
       <div className="flex items-center justify-between gap-2">
-        <span className="t-meta text-muted">Step {idx + 1} of {steps.length}{step.ruleType !== "mandatory" ? ` · ${step.ruleType === "optional" ? "Optional rule" : "House rule"}` : ""}</span>
-        {n !== undefined && <Count n={n} label={nLabel || ""} />}
+        <span className={cx("t-sub font-semibold", readyCount === 4 ? "text-green-text" : "text-ink")} aria-live="polite">{readyCount} / 4 Ready</span>
+        <span className="flex gap-1" aria-hidden>{r.players.map((p) => <span key={p.id} className={cx("h-1.5 w-6 rounded-full", r.resp[p.id] === "ready" ? "bg-green" : r.viewing?.[p.id] ? "bg-[#FF9F0A]" : "bg-line")} />)}</span>
       </div>
-      <div className="t-section">{label}</div>
-      <div className="flex gap-1 mt-1" aria-hidden>
-        {steps.map((s, i) => <span key={s.id} className={cx("h-1 flex-1 rounded-full", i < idx ? "bg-green" : i === idx ? "bg-green-strong" : "bg-line")} />)}
-      </div>
+      <Statuses players={r.players} value={(p) => statusOf(p.id)} labels={{ ready: { text: "Ready", ok: true }, viewing: { text: "Viewing explanation" } }} />
     </div>
-  );
-  const doneCount = r.players.filter((p) => r.resp[p.id] === "done").length;
-  const completion = (q: string, yes = "I've Finished This Step") => (
-    <>
-      {head(q, doneCount, "done")}
-      <Statuses players={r.players} value={(p) => r.resp[p.id]} labels={{ done: { text: "Done", ok: true }, notyet: { text: "Not yet" } }} />
-      <div className="grid grid-cols-2 gap-2">
-        <Btn variant={mine === "done" ? "ok" : "primary"} disabled={busy || mine === "done"} onClick={() => act({ type: "respond", value: "done" })}>{mine === "done" ? <><Check size={16} /> Finished</> : <span className="whitespace-nowrap text-[14px]">{yes}</span>}</Btn>
-        <Btn variant={mine === "notyet" ? "chosen" : "secondary"} disabled={busy || mine === "notyet"} onClick={() => act({ type: "respond", value: "notyet" })}>Not Yet</Btn>
-      </div>
-      {mine === "notyet" && <p className="t-meta text-muted">Take your time. Ask the Rule Assistant or the group if you're stuck.</p>}
-    </>
   );
 
   let body: React.ReactNode;
@@ -512,84 +528,116 @@ function StepPanel({ r, me, step, act, explain, busy, focus, details, showExampl
     const all = votes.every(Boolean);
     const differ = all && !votes.every((v) => v === votes[0]);
     body = (
-      <>
-        {head(step.question || step.title, votes.filter(Boolean).length, "chosen")}
+      <div className="flex flex-col gap-3 border-t border-line pt-3">
         <div className={cx("grid gap-2", step.options!.length === 2 ? "grid-cols-2" : "grid-cols-1")}>
           {step.options!.map((o) => (
-            <Btn key={o.id} variant={mine === o.id ? "selected" : "secondary"} disabled={busy} onClick={() => act({ type: "respond", value: o.id })}>
+            <Btn key={o.id} variant={mine === o.id ? "selected" : "secondary"} disabled={busy} onClick={() => act({ type: "respond", stepId: step.id, value: o.id })}>
               {mine === o.id && <Check size={16} />} {o.label}
             </Btn>
           ))}
         </div>
+        <div className="flex items-center justify-between"><Count n={votes.filter(Boolean).length} label="chosen" /><button onClick={onHelp} className="t-sub font-medium text-green-text min-h-10">Need Explanation</button></div>
         <Statuses players={r.players} value={(p) => (r.resp[p.id] ? step.options!.find((o) => o.id === r.resp[p.id])?.label : undefined)} labels={{}} />
-        {differ && !step.veto && (
-          <div className="bg-surface rounded-xl p-3">
-            <div className="t-section">Agreement Needed</div>
-            <p className="t-sub text-muted">Your group hasn't reached a shared decision yet. Explain your reasoning in the chat and change your choice if you like.</p>
-          </div>
-        )}
-        {step.veto && <p className="t-meta text-muted">Any one player can say No to stop this — no explanation needed.</p>}
-      </>
+        {differ && !step.veto && <p className="t-sub text-muted">Agreement needed — discuss in the chat, then change your choice if you like.</p>}
+        {step.veto && <p className="t-meta text-muted">Any one player can say No to stop this.</p>}
+      </div>
     );
   } else if (step.kind === "dice-dealer") {
     const contenders = r.decisions.dealerContenders ? r.decisions.dealerContenders.split(",") : r.players.map((p) => p.id);
     const myTurn = contenders.includes(me) && r.dice[me] === undefined;
     body = (
-      <>
-        {head("Roll two dice and enter your total", Object.keys(r.dice).length, "entered")}
-        <p className="t-sub text-muted -mt-1">Use your real dice. The highest total becomes the dealer; ties roll again.</p>
-        <Statuses players={r.players} value={(p) => (r.dice[p.id] !== undefined ? String(r.dice[p.id]) : contenders.includes(p.id) ? undefined : "—")} labels={{}} />
+      <div className="flex flex-col gap-3 border-t border-line pt-3">
         {myTurn ? (
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); act({ type: "dice", value: Number(total) }); setTotal(""); }}>
-            <input type="number" inputMode="numeric" min={2} max={12} value={total} onChange={(e) => setTotal(e.target.value)} placeholder="Your total (2–12)" aria-label="Your dice total" className="flex-1 min-w-0 h-11 px-4 rounded-full border border-line outline-none focus:border-green" />
+            <input type="number" inputMode="numeric" min={2} max={12} value={total} onChange={(e) => setTotal(e.target.value)} placeholder="Your total (2–12)" aria-label="Your dice total" className="flex-1 min-w-0 h-11 px-4 rounded-full border border-line bg-bg outline-none focus:border-green" />
             <Btn type="submit" disabled={busy || !(Number(total) >= 2 && Number(total) <= 12)}>Submit</Btn>
           </form>
         ) : (
-          <p className="t-meta text-muted">{contenders.includes(me) ? "Your roll is in. Waiting for the others." : "Waiting for the tied players to roll again."}</p>
+          <p className="t-sub text-muted">{contenders.includes(me) ? "Your roll is in. Waiting for the others." : "Waiting for the tied players to roll again."}</p>
         )}
-      </>
+        <div className="flex items-center justify-between"><Count n={Object.keys(r.dice).length} label="entered" /><button onClick={onHelp} className="t-sub font-medium text-green-text min-h-10">Need Explanation</button></div>
+        <Statuses players={r.players} value={(p) => (r.dice[p.id] !== undefined ? String(r.dice[p.id]) : contenders.includes(p.id) ? undefined : "—")} labels={{}} />
+      </div>
     );
-  } else if (step.kind === "dice-break") {
+  } else if (step.kind === "dice-break" && !r.breakRoll) {
     const canEnter = !r.dealerId || r.dealerId === me;
-    if (!r.breakRoll) {
-      const die = (val: number | null, set: (n: number) => void, label: string) => (
-        <div className="flex flex-col gap-1">
-          <span className="t-meta text-muted">{label}</span>
-          <div className="grid grid-cols-6 gap-1">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <button key={n} type="button" onClick={() => set(n)} aria-pressed={val === n} className={cx("h-11 rounded-lg border t-btn", val === n ? "bg-green-strong text-white border-green-strong shadow-btn" : "border-line bg-bg hover:bg-surface")}>{n}</button>
-            ))}
-          </div>
+    const die = (val: number | null, set: (n: number) => void, label: string) => (
+      <div className="flex flex-col gap-1">
+        <span className="t-meta text-muted">{label}</span>
+        <div className="grid grid-cols-6 gap-1">
+          {[1, 2, 3, 4, 5, 6].map((n) => (
+            <button key={n} type="button" onClick={() => set(n)} aria-pressed={val === n} className={cx("h-11 rounded-lg border t-btn", val === n ? "bg-green-strong text-white border-green-strong shadow-btn" : "border-line bg-bg hover:bg-surface")}>{n}</button>
+          ))}
         </div>
-      );
-      body = (
-        <>
-          {head(canEnter ? "Roll two dice and enter both numbers" : `Waiting for ${dealer?.name || "the dealer"} to roll`)}
-          {canEnter ? (
-            <>
-              {die(d1, setD1, "First die")}
-              {die(d2, setD2, "Second die")}
-              <Btn disabled={busy || !d1 || !d2} onClick={() => act({ type: "break", d1, d2 })}>Submit Dice</Btn>
-            </>
-          ) : (
-            <p className="t-sub text-muted">{dealer?.name || "The dealer"} rolls two real dice and enters them on their phone. Then everyone follows the instruction.</p>
-          )}
-        </>
-      );
-    } else body = completion(step.question || "Has the wall been broken?");
-  } else {
-    body = completion(step.question || "Has everyone completed this step?", step.kind === "begin" ? "Yes, Ready to Play" : "I've Finished This Step");
-  }
+      </div>
+    );
+    body = (
+      <div className="flex flex-col gap-3 border-t border-line pt-3">
+        {canEnter ? (
+          <>
+            {die(d1, setD1, "First die")}
+            {die(d2, setD2, "Second die")}
+            <Btn disabled={busy || !d1 || !d2} onClick={() => act({ type: "break", d1, d2 })}>Submit Dice</Btn>
+          </>
+        ) : (
+          <p className="t-sub text-muted">Waiting for {dealer?.name || "the dealer"} to roll and enter the dice.</p>
+        )}
+        <button onClick={onHelp} className="self-start t-sub font-medium text-green-text min-h-10">Need Explanation</button>
+      </div>
+    );
+  } else body = confirmArea;
 
   return (
-    <Panel label={step.title}>
-      {body}
-      <div className="flex gap-4 flex-wrap">
-        <button onClick={details} className="t-sub font-medium text-green-text min-h-8 hover:underline underline-offset-4">Detailed instructions</button>
-        {step.example && <button onClick={showExample} className="t-sub font-medium text-green-text min-h-8 hover:underline underline-offset-4">Show Example</button>}
+    <section aria-label={step.title} className="border border-line rounded-2xl bg-bg p-4 shadow-card flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <span className="t-meta text-muted tracking-wide">STEP {pad(idx + 1)} / {pad(steps.length)}{step.ruleType !== "mandatory" ? ` · ${step.ruleType === "optional" ? "Optional rule" : "House rule"}` : ""}</span>
+        <h3 className="t-page">{step.title}</h3>
+        <p className="t-body">{instruction}</p>
       </div>
-      {helpRow}
-    </Panel>
+      {ui?.scene && (
+        <div className="rounded-[14px] bg-surface/60 border border-line p-2">
+          <TutorialVisual sceneId={ui.scene} decisions={r.decisions} />
+        </div>
+      )}
+      {r.breakRoll && step.kind === "dice-break" && (
+        <p className="t-sub rounded-[12px] bg-green-soft px-3 py-2">{breakInstruction(step.breakMethod!, r.breakRoll.d1, r.breakRoll.d2, dealer?.name || "the dealer")}</p>
+      )}
+      {body}
+    </section>
+  );
+}
+
+/** Help for ONE player, attached to the same step. Opening/closing only toggles their "viewing" status. */
+function StepHelpSheet({ r, step, open, onClose }: { r: PublicRoom; step: Step | undefined; open: boolean; onClose: () => void }) {
+  const [more, setMore] = useState(false);
+  useEffect(() => { if (open) setMore(false); }, [open]);
+  if (!step) return null;
+  const ui = STEP_UI[step.id];
+  return (
+    <Sheet open={open} onClose={onClose} title="Need Help With This Step?">
+      <div className="flex flex-col gap-4">
+        <div className="t-section">{step.title}</div>
+        {ui?.scene && (
+          <div className="flex flex-col gap-1">
+            <div className="t-meta text-muted">Watch What Happens</div>
+            <div className="rounded-[14px] bg-surface/60 border border-line p-2"><TutorialVisual key={`help-${step.id}`} sceneId={ui.scene} decisions={r.decisions} /></div>
+          </div>
+        )}
+        <div className="rounded-[12px] bg-green-soft px-3 py-2">
+          <div className="t-meta font-semibold text-green-text">Remember</div>
+          <p className="t-body">{ui ? fill(ui.remember, r.decisions) : fill(step.short, r.decisions)}</p>
+        </div>
+        <button onClick={() => setMore(!more)} aria-expanded={more} className="self-start t-sub font-medium text-green-text min-h-10">{more ? "Show less" : "Explain More"}</button>
+        {more && (
+          <div className="t-sub whitespace-pre-wrap text-ink">
+            {fill(step.detail, r.decisions)}
+            {step.example && <><br /><br /><span className="font-semibold">Example: </span>{step.example}</>}
+            <p className="t-meta text-muted mt-3">Source: {step.source}</p>
+          </div>
+        )}
+        <Btn onClick={onClose}>Back to Step</Btn>
+      </div>
+    </Sheet>
   );
 }
 
@@ -682,7 +730,9 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <Header title="My Private Coach" subtitle="Only you can see this conversation." onBack={onBack} backLabel="Back to Shared Table" />
+      <Header title="My Private Coach" subtitle="Only you can see this conversation." onBack={onBack} backLabel="Back to Shared Table"
+        titleClassName="text-green-text"
+        backClassName="pl-2 pr-3 bg-sage text-green-text hover:bg-[color-mix(in_srgb,var(--sage),var(--brand)_14%)] active:bg-[color-mix(in_srgb,var(--sage),var(--brand)_22%)] active:scale-[0.98]" />
       {r.endProposal && (
         <div className="px-4 py-2 bg-surface border-b border-line flex items-center gap-3" role="status">
           <span className="flex-1 t-sub">End Game requested — vote on the Shared Table.</span>

@@ -11,11 +11,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ code: string }
     if (existing) return NextResponse.json(await roomPayload(room, existing), { headers: NO_STORE });
     const body = await req.json().catch(() => ({}));
     const name = cleanName(body.name);
-    if (!name) throw new HttpError(400, "Please enter your name.");
+    if (!name) throw new HttpError(400, "Enter a name to continue.");
     let creds: { pid: string; token: string } | null = null;
     const next = await mutate(code, (r) => {
-      if (r.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) throw new HttpError(409, "Someone in this room already uses that name.");
-      creds = joinPlayer(r, name);
+      if (r.status === "complete") throw new HttpError(409, "This room has ended.");
+      if (r.players.length >= 4) throw new HttpError(409, "This room is full.");
+      if (r.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) throw new HttpError(409, "This name is taken in the room. Choose another.");
+      creds = joinPlayer(r, name, body.avatar);
     });
     const c = creds as unknown as { pid: string; token: string };
     await setSessionCookie(code, c.pid, c.token);

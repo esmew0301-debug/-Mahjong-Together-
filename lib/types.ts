@@ -8,6 +8,9 @@ export interface Player {
   seat: number;
   joinedAt: number;
   tokenHash?: string; // server only, stripped from public view
+  /** "virtual" = a clearly labelled AI demo seat (no credentials; acts only through server-side demo logic). */
+  kind?: "human" | "virtual";
+  avatar?: string;
 }
 
 export interface PublicPlayer extends Omit<Player, "tokenHash"> {
@@ -78,6 +81,8 @@ export interface GameEvent {
   createdAt: number;
   committedAt?: number;
   correctedBy?: string;
+  /** Approvals given by AI demo seats (simulated, never a physical inspection of tiles). */
+  simulated?: string[];
 }
 
 export interface LedgerEntry {
@@ -101,10 +106,24 @@ export interface HandState {
   ended: boolean;
   endReason?: "wins" | "exhausted";
   firstWinFrom?: string | null;
+  /** Ding Que: each player's declared missing suit for this hand (c = Characters, b = Bamboo, d = Dots). */
+  dingQue?: Record<string, "c" | "b" | "d">;
 }
 
 export interface Room {
   v: number;
+  /** "s3" = final Sichuan-only product flow (lobby → three prep steps → gameplay home). */
+  flow?: "s3";
+  /** Room created by Random Match (vs. a private room joined by code / QR). */
+  matched?: boolean;
+  /** Lobby "I'm Ready" per participant (s3 flow). */
+  lobbyReady?: Record<string, boolean>;
+  /** Demo seats' scheduled (staggered) responses: context key → { virtual player id → due time (ms) }. */
+  aiPlans?: Record<string, Record<string, number>>;
+  /** Ding Que selections made in Step 4 (copied to the hand when play starts). */
+  dingQue?: Record<string, "c" | "b" | "d">;
+  /** Last declined End Game proposal, so every phone can show "The game will continue." once. */
+  endDeclined?: { id: string; by: string; at: number } | null;
   code: string;
   name: string;
   createdAt: number;
@@ -114,7 +133,12 @@ export interface Room {
   variant: VariantId | null;
   votes: Record<string, VariantId>;
   stepId: string | null;
+  /** Increments each time a step starts; confirmations belong to (stepId, stepVersion). */
+  stepVersion?: number;
+  /** One shared confirmation per step: "ready" once confirmed (or a consensus option id). */
   resp: Record<string, string>;
+  /** Informational only: who is viewing the explanation. Never erases a "ready". */
+  viewing?: Record<string, boolean>;
   check: Check | null;
   decisions: Record<string, string>;
   dice: Record<string, number>;

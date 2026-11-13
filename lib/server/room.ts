@@ -1,7 +1,7 @@
 import "server-only";
 import crypto from "crypto";
 import { kv } from "./kv";
-import { REACTION_IDS, type Check, type Msg, type PublicPlayer, type PublicRoom, type ReactionId, type Room, type VariantId } from "../types";
+import { REACTION_IDS, type Check, type Msg, type Player, type PublicPlayer, type PublicRoom, type ReactionId, type Room, type VariantId } from "../types";
 import {
   VARIANTS, breakInstruction, fill, firstStep, nextStep, stepById, stepImage, variantById, visibleSteps, type Step,
 } from "../variants";
@@ -60,20 +60,67 @@ export async function mutate(code: string, fn: (r: Room) => void): Promise<Room>
   throw new HttpError(409, "The room is busy. Please try again.");
 }
 
-export async function createRoom(hostName: string, roomName: string) {
+export const AVATARS = ["smile", "cool", "happy", "nerd", "cheer", "calm", "cat", "bear"] as const;
+export const cleanAvatar = (a: unknown) => (AVATARS as readonly string[]).includes(String(a)) ? String(a) : AVATARS[0];
+/** Virtual demo seats. Always labelled "AI Player" in the UI; never presented as real people. */
+export const AI_NAMES = ["Esme", "Xinyi", "Xintong", "Frank"];
+/** Fixed emoji avatar per demo seat (same everywhere in the app). */
+export const AI_AVATAR: Record<string, string> = { Xinyi: "heart", Xintong: "dog", Frank: "bear", Esme: "happy" };
+
+function baseRoom(code: string, hostId: string, name: string, players: Player[], text: string): Room {
+  return {
+    v: 1, code, name, createdAt: Date.now(), hostId, flow: "s3", lobbyReady: {},
+    players, status: "lobby", variant: "sichuan", votes: {}, stepId: null, resp: {}, check: null, decisions: {}, dice: {},
+    dealerId: null, breakRoll: null, finish: null, reflections: {},
+    messages: [msg({ sender: "system", text })], lastSummaryTs: 0,
+  };
+}
+
+/** Private room (Join a Room → Create a Private Room). */
+export async function createRoom(hostName: string, roomName: string, avatar?: string) {
   const token = crypto.randomBytes(24).toString("base64url");
   const pid = uid();
   for (let i = 0; i < 6; i++) {
     const code = `MAH-${rand(4)}`;
-    const room: Room = {
-      v: 1, code, name: roomName || "Mahjong Night", createdAt: Date.now(), hostId: pid,
-      players: [{ id: pid, name: hostName, seat: 0, joinedAt: Date.now(), tokenHash: hash(token) }],
-      status: "lobby", variant: null, votes: {}, stepId: null, resp: {}, check: null, decisions: {}, dice: {},
-      dealerId: null, breakRoll: null, finish: null, reflections: {},
-      messages: [msg({ sender: "system", text: `${hostName} created the room.` })],
-      lastSummaryTs: 0,
-    };
+    const room = baseRoom(code, pid, roomName || "Sichuan Table",
+      [{ id: pid, name: hostName, seat: 0, joinedAt: Date.now(), tokenHash: hash(token), kind: "human", avatar: cleanAvatar(avatar) }],
+      `${hostName} created the room.`);
     if (await kv.cas(roomKey(code), -1, JSON.stringify(room), TTL)) return { room, pid, token };
+  }
+  throw new HttpError(500, "Could not allocate a room code");
+}
+
+/** Assign distinct AI demo identities that don't collide with anyone already seated. */
+export function addVirtualSeats(r: Room, count: number) {
+  const used = new Set(r.players.map((p) => p.name.toLowerCase()));
+  const pool = AI_NAMES.filter((n) => !used.has(n.toLowerCase()));
+  for (let i = 0; i < count && r.players.length < 4 && pool.length; i++) {
+    const seats = new Set(r.players.map((p) => p.seat));
+    const seat = [0, 1, 2, 3].find((x) => !seats.has(x))!;
+    const name = pool.shift()!;
+    r.players.push({ id: `ai-${uid()}`, name, seat, joinedAt: Date.now(), kind: "virtual", avatar: AI_AVATAR[name] });
+  }
+  r.players.sort((a, b) => a.seat - b.seat);
+}
+
+/** Random Match: one room for 1–4 humans; empty seats become labelled AI demo seats. Written atomically (must not exist). */
+export async function createMatchedRoom(humans: { name: string; avatar?: string }[]) {
+  if (!humans.length || humans.length > 4) throw new HttpError(500, "Invalid match size");
+  const creds = humans.map(() => ({ pid: uid(), token: crypto.randomBytes(24).toString("base64url") }));
+  const taken = new Set<string>();
+  const players: Player[] = humans.map((h, i) => {
+    let name = h.name;
+    for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${h.name} ${k}`; // never two seats with one name
+    taken.add(name.toLowerCase());
+    return { id: creds[i].pid, name, seat: i, joinedAt: Date.now(), tokenHash: hash(creds[i].token), kind: "human", avatar: cleanAvatar(h.avatar) };
+  });
+  for (let i = 0; i < 6; i++) {
+    const code = `MAH-${rand(4)}`;
+    const room = baseRoom(code, creds[0].pid, "Sichuan Table", players.map((p) => ({ ...p })), "Matched a table of four.");
+    room.matched = true;
+    addVirtualSeats(room, 4 - humans.length);
+    autoVirtual(room);
+    if (await kv.cas(roomKey(code), -1, JSON.stringify(room), TTL)) return { room, creds };
   }
   throw new HttpError(500, "Could not allocate a room code");
 }
@@ -89,14 +136,14 @@ export function authPid(room: Room, cookie: string | undefined): string | null {
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? pid : null;
 }
 
-export function joinPlayer(room: Room, name: string) {
-  if (room.status === "complete") throw new HttpError(409, "This session has ended.");
-  if (room.players.length >= 4) throw new HttpError(409, "This room already has four players.");
+export function joinPlayer(room: Room, name: string, avatar?: string) {
+  if (room.status === "complete") throw new HttpError(409, "This room has ended.");
+  if (room.players.length >= 4) throw new HttpError(409, "This room is full.");
   const token = crypto.randomBytes(24).toString("base64url");
   const pid = uid();
   const used = new Set(room.players.map((p) => p.seat));
   const seat = [0, 1, 2, 3].find((s) => !used.has(s))!;
-  room.players.push({ id: pid, name, seat, joinedAt: Date.now(), tokenHash: hash(token) });
+  room.players.push({ id: pid, name, seat, joinedAt: Date.now(), tokenHash: hash(token), kind: "human", avatar: cleanAvatar(avatar) });
   room.players.sort((a, b) => a.seat - b.seat);
   push(room, msg({ sender: "system", text: room.status === "lobby" ? `${name} joined the room.` : `${name} took the open seat.` }));
   return { pid, token };
@@ -115,7 +162,7 @@ export function presenceOf(pres: Record<string, string>, pid: string): PublicPla
   return age < 8000 ? "online" : age < 45000 ? "reconnecting" : "offline";
 }
 export function publicRoom(room: Room, pres: Record<string, string>): PublicRoom {
-  return { ...room, players: room.players.map(({ tokenHash: _t, ...p }) => ({ ...p, presence: presenceOf(pres, p.id) })) };
+  return { ...room, players: room.players.map(({ tokenHash: _t, ...p }) => ({ ...p, presence: p.kind === "virtual" ? "online" : presenceOf(pres, p.id) })) };
 }
 
 // ---------- group engine ----------
@@ -131,24 +178,20 @@ function stepNumber(r: Room, s: Step) {
 
 export function enterStep(r: Room, s: Step) {
   r.stepId = s.id;
+  r.stepVersion = (r.stepVersion || 0) + 1;
   r.resp = {};
+  r.viewing = {};
   if (s.kind === "dice-dealer") { r.dice = {}; delete r.decisions.dealerContenders; }
   if (s.kind === "dice-break") r.breakRoll = null;
-  r.check = s.understand || s.kind === "review" ? newCheck(false, s.title, entryForStage(s.id)?.id) : null;
+  if (s.id === "sc-exchange" && !r.decisions.exchangeDir) {
+    // One shared, random direction for the whole table (shown to everyone; never switched silently).
+    r.decisions.exchangeDir = ["clockwise", "counterclockwise", "across"][crypto.randomInt(3)];
+  }
+  // Tutorial UX 2.0: ONE shared confirmation per step. No separate "does everyone understand" round.
+  r.check = null;
   const total = visibleSteps(s.variant, r.decisions).length;
-  const dealer = r.dealerId ? nameOf(r, r.dealerId) : null;
-  let short = fill(s.short, r.decisions);
-  if (dealer && (s.kind === "dice-break" || s.id.endsWith("-deal"))) short += ` Dealer: ${dealer}.`;
-  push(r, msg({
-    sender: "ai", aiMode: "demo", kind: "guide",
-    title: `Step ${stepNumber(r, s)} of ${total} — ${s.title}`,
-    text: [s.intro, short, s.why ? `Why: ${s.why}` : "", s.doSteps?.length ? `Do this:\n${s.doSteps.map((d, i) => `${i + 1}. ${d}`).join("\n")}` : ""].filter(Boolean).join("\n\n"),
-    topicId: entryForStage(s.id)?.id,
-    detail: fill(s.detail, r.decisions),
-    source: s.source,
-    image: stepImage(s, r.decisions),
-    imageAlt: s.imageAlt,
-  }));
+  // The step itself is shown as one shared, live-updating card; the chat only gets a compact marker.
+  push(r, msg({ sender: "system", text: `Step ${stepNumber(r, s)} of ${total} · ${s.title}` }));
 }
 
 function advance(r: Room) {
@@ -180,15 +223,109 @@ function resolveCheckIfDone(r: Room) {
 }
 
 /** Called after the AI explains something publicly: open a fresh understanding round if anyone needed help. */
+/** After a public explanation. Tutorial steps are never reset by explanations; an understanding check exists
+ *  only during play (started explicitly), and a fresh round opens only if someone asked for help in it. */
 export function afterExplanation(r: Room, summary: boolean, topicId?: string, topicTitle?: string) {
-  if (r.check && (r.check.needs.length || summary)) {
+  const inPlay = r.status === "playing" || r.status === "hand_review";
+  if (!inPlay) return;
+  if (r.check && r.check.needs.length) {
     r.check = { ...r.check, round: r.check.round + 1, resp: {}, needs: [], topicId: topicId || r.check.topicId };
-  } else if (!r.check && summary && (r.status === "setup" || r.status === "playing")) {
+  } else if (!r.check && summary) {
     r.check = newCheck(true, topicTitle || "Your group's questions", topicId);
   }
 }
 
 export function applyAction(r: Room, pid: string, a: { type: string; [k: string]: unknown }, pres: Record<string, string>) {
+  applyActionInner(r, pid, a, pres);
+  autoVirtual(r);
+}
+
+const isVirtual = (r: Room, id: string) => r.players.find((p) => p.id === id)?.kind === "virtual";
+
+/**
+ * Staggered demo responses (seconds after a confirmation opens). Deterministic so tests are reproducible; columns
+ * follow the demo seat names; never longer than 5 seconds; a different pattern for every step / context.
+ */
+const DELAY_ORDER = ["Xinyi", "Xintong", "Frank", "Esme"];
+const DELAYS: Record<string, number[]> = {
+  lobby: [1, 3, 2, 5],
+  "sc-tiles": [2, 3, 1, 5],
+  "sc-wall": [3, 2, 5, 1],
+  "sc-exchange": [1, 5, 2, 3],
+  "sc-dingque": [5, 1, 3, 2],
+  end: [2, 1, 3, 5],
+  event: [3, 1, 5, 2],
+  final: [1, 3, 2, 5],
+};
+function delayFor(r: Room, ctx: string, botId: string) {
+  const row = DELAYS[ctx] || DELAYS.event;
+  const name = r.players.find((p) => p.id === botId)?.name || "";
+  const i = Math.max(0, DELAY_ORDER.indexOf(name));
+  return Math.min(5, row[i]) * 1000;
+}
+
+/** Earliest pending demo response time, or null (used by polling to apply due responses). */
+export function nextVirtualDue(r: Room): number | null {
+  let min: number | null = null;
+  for (const plan of Object.values(r.aiPlans || {})) for (const t of Object.values(plan)) if (min === null || t < min) min = t;
+  return min;
+}
+
+/**
+ * Server-side demo logic for AI seats. They only ever give software acknowledgements (ready, demo votes,
+ * simulated verification) — never physical tile actions, wins, kongs or scores. Every simulated approval is
+ * recorded so the UI can label it. Each confirmation context gets a deterministic schedule when it opens
+ * (stored in the room, so refreshes/polls/duplicate requests never restart it); a seat acts at most once per
+ * context, only when its time is due, and stale plans for finished contexts are discarded.
+ */
+export function autoVirtual(r: Room, now = Date.now()) {
+  const bots = r.players.filter((p) => p.kind === "virtual").map((p) => p.id);
+  if (!bots.length || r.flow !== "s3") return;
+  const humans = r.players.filter((p) => p.kind !== "virtual").map((p) => p.id);
+  for (let guard = 0; guard < 16; guard++) {
+    const snap = () => JSON.stringify([r.status, r.stepId, r.stepVersion, r.lobbyReady, r.resp, r.endProposal, r.finalReview, r.nextDealerVotes, (r.events || []).map((e) => [e.id, e.rev, e.status, e.approvals])]);
+    const v0 = snap();
+    const plans: Record<string, Record<string, number>> = r.aiPlans || {};
+    const active = new Set<string>();
+    // Ensure a plan for a context (created when first seen = when it opened); return true if `b` is due now.
+    const due = (key: string, ctx: string, b: string, pending: boolean) => {
+      active.add(key);
+      if (!plans[key]) plans[key] = Object.fromEntries(bots.map((id) => [id, now + delayFor(r, ctx, id)]));
+      if (!pending) { delete plans[key][b]; return false; }
+      const t = plans[key][b];
+      if (t === undefined || t > now) return false;
+      delete plans[key][b]; // acts at most once per context
+      return true;
+    };
+    for (const b of bots) {
+      const run = (a: { type: string; [k: string]: unknown }) => { try { applyActionInner(r, b, a, {}); } catch { /* demo seat action not applicable */ } };
+      if (r.status === "lobby" && due("lobby", "lobby", b, !r.lobbyReady?.[b])) run({ type: "lobby-ready" });
+      if (r.status === "setup" && r.stepId && due(`step:${r.stepId}:${r.stepVersion}`, r.stepId, b, r.resp[b] !== "ready")) {
+        // Demo seats pick a valid missing suit (varied by seat) when the step requires a choice.
+        const suit = r.stepId === "sc-dingque" ? (["b", "d", "c"] as const)[(r.players.find((p) => p.id === b)?.seat ?? 0) % 3] : undefined;
+        run({ type: "respond", stepId: r.stepId, value: "ready", suit });
+      }
+      if (r.endProposal && due(`end:${r.endProposal.id}`, "end", b, !r.endProposal.votes[b])) run({ type: "end-vote", proposalId: r.endProposal.id, value: "agree" });
+      for (const e of (r.events || []).filter((x) => x.status === "pending")) {
+        if (!due(`ev:${e.id}:${e.rev}`, "event", b, e.approvals[b] !== "confirm")) continue;
+        e.simulated = [...new Set([...(e.simulated || []), b])];
+        run({ type: "event-respond", eventId: e.id, rev: e.rev, value: "confirm" });
+      }
+      if (r.status === "session_review" && r.finalReview && due(`final:${r.finalReview.ledgerVersion}`, "final", b, !r.finalReview.resp[b]))
+        run({ type: "final-respond", ledgerVersion: r.ledgerVersion || 0, value: "confirm" });
+      if (r.status === "hand_review" && !r.nextDealerVotes?.[b]) {
+        const humanVote = humans.map((h) => r.nextDealerVotes?.[h]).find(Boolean); // follow a real player's choice
+        if (humanVote) run({ type: "next-dealer", dealerId: humanVote });
+      }
+    }
+    // Drop plans for contexts that have finished (a late, obsolete response is never applied) and empty plans.
+    for (const k of Object.keys(plans)) if (!active.has(k) || !Object.keys(plans[k]).length) delete plans[k];
+    r.aiPlans = plans;
+    if (v0 === snap()) return;
+  }
+}
+
+function applyActionInner(r: Room, pid: string, a: { type: string; [k: string]: unknown }, pres: Record<string, string>) {
   const me = nameOf(r, pid);
   const isHost = r.hostId === pid;
   const step = stepById(r.stepId);
@@ -205,7 +342,24 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
       push(r, msg({ sender: pid, name: me, text }));
       return;
     }
+    case "lobby-ready": {
+      if (r.status !== "lobby") return; // already started — no-op
+      r.lobbyReady = { ...(r.lobbyReady || {}), [pid]: true };
+      if (r.players.length === 4 && ids(r).every((id) => r.lobbyReady![id])) {
+        r.variant = "sichuan";
+        r.status = "setup";
+        push(r, msg({ sender: "system", text: "Everyone's ready." }));
+        enterStep(r, firstStep("sichuan"));
+      }
+      return;
+    }
+    case "lobby-unready": {
+      if (r.status !== "lobby" || isVirtual(r, pid)) return;
+      if (r.lobbyReady) delete r.lobbyReady[pid];
+      return;
+    }
     case "start": {
+      if (r.flow === "s3") throw new HttpError(409, "Everyone taps I'm Ready to start.");
       if (!isHost) throw new HttpError(403, "Only the host can start.");
       if (r.status !== "lobby") return;
       if (r.players.length < 4) throw new HttpError(409, "Four players are needed to start.");
@@ -244,7 +398,7 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
       return;
     }
     case "check-start": {
-      if (r.status !== "setup" && r.status !== "playing") throw new HttpError(409, "Not available now.");
+      if (r.status !== "playing" && r.status !== "hand_review") throw new HttpError(409, "Understanding checks are available during play. Tutorial steps use their own single confirmation.");
       if (r.check) return;
       const lastTopic = [...r.messages].reverse().find((m) => m.sender === "ai" && m.topicId)?.topicId;
       r.check = newCheck(true, step?.title || "Our discussion", step ? entryForStage(step.id)?.id || lastTopic : lastTopic);
@@ -267,14 +421,26 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
       return;
     }
     case "respond": {
-      if (r.status !== "setup" || !step) throw new HttpError(409, "No active step.");
-      if (r.check) throw new HttpError(409, "Finish the understanding check first.");
+      if (r.status !== "setup" || !step) return; // step already finished (e.g. a late duplicate) — no-op
+      // Confirmations belong to one step: a late tap for a previous step never counts toward the next one.
+      if (a.stepId !== undefined && a.stepId !== r.stepId) return;
       if (step.kind === "dice-break" && !r.breakRoll) throw new HttpError(409, "Enter the dice first.");
-      const val = String(a.value);
+      let val = String(a.value);
       if (step.kind === "consensus") {
         if (!step.options!.some((o) => o.id === val)) throw new HttpError(400, "Invalid option");
-      } else if (val !== "done" && val !== "notyet") throw new HttpError(400, "Invalid response");
+      } else {
+        if (val === "done") val = "ready";
+        if (val !== "ready") throw new HttpError(400, "Invalid response");
+        if (r.resp[pid] === "ready") return; // repeated taps / retries: no duplicate confirmation
+        if (step.id === "sc-dingque") {
+          // Each player's own choice: saved with their single confirmation, locked afterwards.
+          const suit = a.suit !== undefined ? String(a.suit) : r.dingQue?.[pid];
+          if (suit !== "c" && suit !== "b" && suit !== "d") throw new HttpError(400, "Choose your missing suit first.");
+          r.dingQue = { ...(r.dingQue || {}), [pid]: suit };
+        }
+      }
       r.resp[pid] = val;
+      if (r.viewing) delete r.viewing[pid];
       if (!allAnswered(r, r.resp)) return;
       const vals = ids(r).map((id) => r.resp[id]);
       if (step.kind === "consensus") {
@@ -297,10 +463,27 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
           : `Your group has agreed: ${label}.`;
         push(r, msg({ sender: "ai", aiMode: "demo", text }));
         advance(r);
-      } else if (vals.every((x) => x === "done")) {
+      } else if (vals.every((x) => x === "ready")) {
         push(r, msg({ sender: "system", text: step.kind === "begin" ? "All 4 players are ready." : `All 4 players completed: ${step.title}.` }));
         advance(r);
       }
+      return;
+    }
+    case "dingque-pick": {
+      // Pre-selection (kept across refresh) — not a confirmation. Locked once the player has confirmed.
+      if (r.status !== "setup" || r.stepId !== "sc-dingque" || a.stepId !== r.stepId) return;
+      if (r.resp[pid] === "ready") return;
+      const suit = String(a.suit);
+      if (suit !== "c" && suit !== "b" && suit !== "d") throw new HttpError(400, "Unknown suit");
+      r.dingQue = { ...(r.dingQue || {}), [pid]: suit };
+      return;
+    }
+    case "step-help": {
+      // Informational status only; it never changes anyone's confirmation.
+      if (r.status !== "setup" || !step || a.stepId !== r.stepId) return;
+      r.viewing = { ...(r.viewing || {}) };
+      if (a.open) r.viewing[pid] = true;
+      else delete r.viewing[pid];
       return;
     }
     case "dice": {
@@ -364,7 +547,7 @@ export function applyAction(r: Room, pid: string, a: { type: string; [k: string]
       if (r.status !== "lobby" && presenceOf(pres, target) !== "offline") throw new HttpError(409, "You can only free the seat of a player who is offline.");
       const name = nameOf(r, target);
       r.players = r.players.filter((p) => p.id !== target);
-      delete r.votes[target]; delete r.resp[target]; delete r.dice[target];
+      delete r.votes[target]; delete r.resp[target]; delete r.dice[target]; if (r.lobbyReady) delete r.lobbyReady[target];
       if (r.check) { delete r.check.resp[target]; r.check.needs = r.check.needs.filter((x) => x !== target); }
       push(r, msg({ sender: "system", text: `${name}'s seat is now open. A new player can join with the room code.` }));
       return;

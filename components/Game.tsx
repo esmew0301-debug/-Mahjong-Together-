@@ -11,7 +11,8 @@ import { Btn, Count, Panel, Sheet, Statuses, cx } from "./ui";
 import { Confetti, type ConfettiRef } from "./ui/confetti";
 import { ThemeToggle } from "./ui/theme-toggle";
 import { displayName } from "@/lib/names";
-import { BRAND_GREEN } from "@/lib/brand";
+import { gentleConfetti } from "@/lib/celebrate";
+import { EMOJI_FONT, emojiFor } from "./s3/avatar";
 
 type Act = (a: Record<string, unknown>) => void;
 const newIdem = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now());
@@ -654,8 +655,6 @@ export function ReconcilePanel({ r, act, busy, openRecord }: { r: PublicRoom; ac
 }
 
 // ---------- Final results ----------
-let lastConfetti = { code: "", t: 0 };
-
 export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me: string; onHome: () => void; reflection: React.ReactNode }) {
   const reduce = useReducedMotion();
   const { totals, wins, kongs, handsPlayed, committed } = useScores(r);
@@ -670,27 +669,20 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
   const top = Math.max(...ranked.map((p) => totals[p.id] || 0));
   const min = Math.min(...ranked.map((p) => totals[p.id] || 0));
   const rankOf = (id: string) => 1 + ranked.filter((p) => (totals[p.id] || 0) > (totals[id] || 0)).length; // ties share rank
-  // Bar height normalized to [12%, 100%] so negatives never produce negative heights.
-  const heightPct = (v: number) => (top === min ? 70 : 12 + ((v - min) / (top - min)) * 88);
+  // Bar height normalized to [12%, 100%] so negatives never produce negative heights. When every score is equal
+  // (e.g. all zero) every bar gets the same small baseline — no invented differences.
+  const heightPct = (v: number) => (top === min ? 6 : 10 + ((v - min) / (top - min)) * 60); // max 70%: crown + label always fit above
   const bars = r.players.map((p) => p); // seat order on the podium
   const variant = variantById(r.variant);
   const scored = (r.ledger || []).length > 0 && top !== min; // a genuine scored result with a real top score
   const topics = [...new Set(committed.flatMap((e) => (e.type === "kong" ? ["Kong payments"] : e.type === "win" ? ["Winning hands and payments"] : e.type === "exhaust" ? ["Wall exhaustion settlement"] : [])))];
 
+  // Every completed session gets the celebration (also all-zero / early end). Scheduled after the bars rise;
+  // cleanup cancels pending bursts, so polling, Strict Mode and navigation never double-fire or leak.
   useEffect(() => {
-    if (reduce || !scored) return; // no winner celebration for an unscored / all-zero session
-    const now = Date.now();
-    if (lastConfetti.code === r.code && now - lastConfetti.t < 4000) return; // StrictMode remount / rerender guard
-    lastConfetti = { code: r.code, t: now };
-    const timers: number[] = [];
-    const start = 1500; // after bars rise (≤900ms) and the crown appears
-    for (let i = 0; i < 6; i++)
-      timers.push(window.setTimeout(() => confettiRef.current?.fire({
-        particleCount: 14, angle: 270, spread: 70, startVelocity: 4, gravity: 0.55, drift: (Math.random() - 0.5) * 0.6, ticks: 320, scalar: 0.9,
-        origin: { x: 0.1 + Math.random() * 0.8, y: -0.05 }, colors: [BRAND_GREEN, "#FFD60A", "#FF9F0A", "#0A84FF", "#FF2D55", "#AF52DE"],
-      }), start + i * 380));
-    return () => timers.forEach(clearTimeout);
-  }, [r.code, reduce, scored]);
+    if (reduce) return;
+    return gentleConfetti(confettiRef, { delay: 1500 });
+  }, [r.code, reduce]);
 
   return (
     <div className="min-h-[100dvh] flex flex-col pt-safe relative">
@@ -698,47 +690,58 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
       <div className="h-14 px-4 flex items-center justify-between t-app">Mahjong Together<span className="-mr-2"><ThemeToggle /></span></div>
       <main className="flex-1 px-4 py-4 flex flex-col gap-6">
         <div>
-          <h1 className="t-app">{scored ? "Game Complete!" : "Session Ended"}</h1>
-          <p className="t-body text-muted">{scored ? "Final Results" : "No Scored Hands Completed"} · {r.name}</p>
+          <h1 className="t-app">Game Complete!</h1>
+          <p className="t-body text-muted">Final Results</p>
+          {scored ? (() => {
+            const firsts = ranked.filter((p) => (totals[p.id] || 0) === top).map((p) => displayName(p.name));
+            return <p className="t-page mt-3">{firsts.length === 1 ? `${firsts[0]} Takes First Place!` : `${firsts.join(" and ")} Tie for First Place!`}</p>;
+          })() : (
+            <div className="mt-3"><p className="t-page">Session Complete</p><p className="t-sub text-muted">No points were recorded.</p></div>
+          )}
           <p className="t-meta text-muted">
-            {[r.endedEarly ? "Completed — Ended by Group Agreement" : null, `${handsPlayed} hand${handsPlayed === 1 ? "" : "s"}`, variant?.name, "game points only"].filter(Boolean).join(" · ")}
+            {[r.endedEarly ? "Completed — Ended by Group Agreement" : null, handsPlayed ? `${handsPlayed} hand${handsPlayed === 1 ? "" : "s"}` : null, variant?.name, "game points only"].filter(Boolean).join(" · ")}
           </p>
         </div>
-        {scored && <section aria-label="Winner podium" className="flex items-end justify-between gap-3 h-[220px] px-1 pt-8">
+        <section aria-label="Final results chart" data-chart="results" className="flex items-end justify-between gap-3 h-[244px] px-1 pt-8">
           {bars.map((p, i) => {
             const v = totals[p.id] || 0;
             const isTop = scored && v === top;
             return (
               <div key={p.id} className="flex-1 h-full flex flex-col items-center justify-end gap-1 min-w-0">
+                <div className="flex-1 min-h-0 w-full flex flex-col items-center justify-end gap-1">
                 {isTop && (
                   <motion.span initial={reduce ? false : { opacity: 0, scale: 0.4, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={reduce ? { duration: 0 } : { delay: 0.9, duration: 0.35, ease: "easeOut" }} aria-label="Top score">
                     <Crown size={22} strokeWidth={1.75} className="text-[#FFB800]" fill="#FFD60A" />
                   </motion.span>
                 )}
-                <span className="t-sub font-semibold tabular-nums">{signed(v)}</span>
+                <span className="t-sub font-semibold tabular-nums">{signed(v)} pts</span>
                 <motion.div
+                  data-bar={v}
                   initial={reduce ? false : { height: 0 }}
                   animate={{ height: `${heightPct(v)}%` }}
                   transition={reduce ? { duration: 0 } : { duration: 0.5 + i * 0.12, ease: "easeOut" }}
                   className={cx("w-full max-w-[64px] rounded-t-[14px] rounded-b-[6px]", isTop ? "bg-green" : "bg-bubble border border-line")}
                 />
+                </div>
+                <span className="t-meta text-muted truncate max-w-full pt-1" title={displayName(p.name)}>{displayName(p.name)}</span>
               </div>
             );
           })}
-        </section>}
+        </section>
         <ol className="flex flex-col divide-y divide-line -mt-2">
           {ranked.map((p) => (
             <li key={p.id} className="flex items-center gap-3 py-2 t-body">
-              <span className="w-7 t-sub text-muted">{scored ? `#${rankOf(p.id)}` : "–"}</span>
-              <span className="flex-1 min-w-0 truncate">{displayName(p.name)}{p.id === me ? " (you)" : ""}{scored && (totals[p.id] || 0) === top ? " 👑" : ""}</span>
-              <span className="font-semibold tabular-nums">{signed(totals[p.id] || 0)}</span>
+              {scored && <span className="w-7 t-sub text-muted">#{rankOf(p.id)}</span>}
+              <span aria-hidden className="h-[34px] w-[34px] rounded-full bg-bubble flex items-center justify-center shrink-0" style={{ ...EMOJI_FONT, fontSize: 19, lineHeight: 1 }}>{emojiFor(p)}</span>
+              <span className="flex-1 min-w-0 truncate">{displayName(p.name)}{p.id === me ? " (you)" : ""}{p.kind === "virtual" ? <span className="text-muted"> · AI Player</span> : null}{scored && (totals[p.id] || 0) === top ? " 👑" : ""}</span>
+              <span className="font-semibold tabular-nums">{signed(totals[p.id] || 0)} pts</span>
             </li>
           ))}
         </ol>
         {scored && ranked.filter((p) => (totals[p.id] || 0) === top).length > 1 && <p className="t-sub text-muted -mt-3">Tied for first place — no tie-breaker applied.</p>}
-        {!scored && <p className="t-sub text-muted -mt-3">No points were confirmed, so there is no winner for this session.</p>}
+        {committed.some((e) => (e.simulated || []).length > 0) && <p className="t-meta text-muted -mt-3">Demo session: includes simulated confirmations from AI Players.</p>}
         <section className="flex flex-col gap-2">
-          <button onClick={() => setShowBreakdown(!showBreakdown)} aria-expanded={showBreakdown} className="flex items-center justify-between t-section min-h-11">Full Score Breakdown <ChevronDown size={18} className={cx("text-muted", showBreakdown && "rotate-180")} /></button>
+          <button onClick={() => setShowBreakdown(!showBreakdown)} aria-expanded={showBreakdown} className="flex items-center justify-between t-section min-h-11">View Score Details <ChevronDown size={18} className={cx("text-muted", showBreakdown && "rotate-180")} /></button>
           {showBreakdown && (
             <>
               <ul className="t-sub flex flex-col gap-1">
@@ -748,16 +751,10 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
             </>
           )}
         </section>
-        <section className="flex flex-col gap-1">
-          <div className="t-section">What We Learned</div>
-          <p className="t-sub text-muted">
-            {handsPlayed} hand{handsPlayed === 1 ? "" : "s"} of {variant?.name} · {Object.values(wins).reduce((a, b) => a + b, 0)} verified win(s) · {Object.values(kongs).reduce((a, b) => a + b, 0)} kong(s).
-            {topics.length ? ` Topics practised: ${topics.join(", ")}.` : ""}
-          </p>
-        </section>
+
         {reflection}
       </main>
-      <div className="sticky bottom-0 z-40 bg-bg px-4 pt-3 pb-safe border-t border-line">
+      <div className="sticky bottom-0 z-40 bg-page px-4 pt-3 pb-safe border-t border-line">
         <Btn className="w-full" onClick={onHome}>Back to Home</Btn>
       </div>
     </div>

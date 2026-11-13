@@ -12,7 +12,7 @@ import { exhaustCalc, kongCalc, suggestedNextDealer, winCalc } from "../scoring/
 const ids = (r: Room) => r.players.map((p) => p.id);
 
 export function initGame(r: Room) {
-  r.hand = { n: 1, dealerId: r.dealerId, winners: [], ended: false };
+  r.hand = { n: 1, dealerId: r.dealerId, winners: [], ended: false, dingQue: r.dingQue ? { ...r.dingQue } : undefined };
   r.hands = [];
   r.events = [];
   r.ledger = [];
@@ -83,11 +83,20 @@ function compute(r: Room, type: GameEvent["type"], actor: string | undefined, cl
     const transfers = cleanTransfers(r, manualRaw);
     return { transfers, manual: true, lines: ["Manual group-verified score: the table entered these transfers."], problems: [] };
   }
-  if (type === "win") return winCalc(actor!, claim as unknown as WinClaim, active, name);
+  if (type === "win") {
+    const calc = winCalc(actor!, claim as unknown as WinClaim, active, name);
+    const dq = r.hand?.dingQue?.[actor!];
+    // Ding Que: the declared missing suit must be cleared. The player (and then the table) confirms this —
+    // the app never assumes a concealed hand satisfies it.
+    if (dq && claim.missingSuitCleared !== "yes" && !calc.problems.some((p) => /missing suit/i.test(p)))
+      calc.problems.push(`Confirm you no longer hold any ${SUIT_NAME[dq]} tiles (your missing suit).`);
+    return calc;
+  }
   if (type === "kong") return kongCalc(claim as unknown as KongClaim, active, name);
   return exhaustCalc(claim as ExhaustClaim, active, kongIncomeThisHand(r), name);
 }
 
+const SUIT_NAME: Record<string, string> = { c: "Characters", b: "Bamboo", d: "Dots" };
 const METHOD: Record<string, string> = { self_draw: "self-draw (Zi Mo)", discard: "on a discard (Dian Pao)", kong_replacement: "on a kong replacement tile", robbing_kong: "by robbing a kong" };
 const STRUCT: Record<string, string> = { standard: "standard hand (four sets + a pair)", seven_pairs: "seven pairs", all_pungs: "all pungs", other: "other / not sure" };
 const KONG: Record<string, string> = { concealed: "concealed kong", exposed: "exposed kong (from a discard)", added: "added kong" };
@@ -267,7 +276,7 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       const votes = ids(r).map((id) => r.nextDealerVotes![id]);
       if (ids(r).length === 4 && votes.every((v) => v && v === votes[0])) {
         const n = r.hand!.n + 1;
-        r.hand = { n, dealerId: d, winners: [], ended: false };
+        r.hand = { n, dealerId: d, winners: [], ended: false, dingQue: r.hand?.dingQue }; // missing suits carry over in this prototype
         r.status = "playing";
         r.nextDealerVotes = {};
         push(r, msg({ sender: "ai", aiMode: "demo", title: `Hand ${n}`, text: `${nameOf(r, d)} deals. Reshuffle, build the wall, and deal as before. Scores carry over from earlier hands.` }));
@@ -313,6 +322,7 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       if (r.players.length < 4) throw new HttpError(409, "All four players need to be in the room.");
       if (r.endProposal) throw new HttpError(409, `${nameOf(r, r.endProposal.by)} has already asked to end the game. Vote on that request.`);
       r.endProposal = { id: uid(), by: pid, votes: { [pid]: "agree" }, createdAt: Date.now(), fromStatus: r.status };
+      r.endDeclined = null;
       push(r, msg({ sender: "system", text: `${me} asked to end this session. Everyone must agree.` }));
       return true;
     }
@@ -322,6 +332,7 @@ export function applyGameAction(r: Room, pid: string, a: Record<string, unknown>
       const v = String(a.value);
       if (!["agree", "keep", "wait"].includes(v)) throw new HttpError(400, "Invalid vote");
       if (v === "keep") {
+        r.endDeclined = { id: pr.id, by: pid, at: Date.now() };
         r.endProposal = null;
         push(r, msg({ sender: "system", text: `${me} wants to keep playing. The game continues.` }));
         return true;

@@ -1,0 +1,54 @@
+/* Homepage hero: a solid 3D 發 tile (CSS 3D). Motion = the supplied animated MacBook's `rotate` keyframes
+   (same percentages and X/Y angles, full 360° turn, ~10s), applied to Mahjong-tile geometry. */
+.stage { position: relative; display: flex; align-items: center; justify-content: center; }
+.scene { perspective: 1400px; perspective-origin: 50% 45%; }
+.tile { position: relative; transform-style: preserve-3d; animation: mahjong-rotate 10s infinite; will-change: transform; transform: rotateX(-20deg) rotateY(0deg) rotateZ(0deg); }
+.face { position: absolute; inset: 0; border-radius: var(--r); backface-visibility: hidden; }
+.front {
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(120% 90% at 28% 18%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+    linear-gradient(160deg, #fffdf7 0%, #f7f1e3 55%, #ece3cf 100%);
+  box-shadow: inset 0 0 0 1px rgba(160, 140, 100, 0.18), inset 0 -8px 14px rgba(120, 100, 60, 0.08);
+}
+.back { background: linear-gradient(160deg, #3b8a33 0%, #2f6e28 50%, #23561e 100%); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.side { position: absolute; left: 50%; top: 50%; transform-style: preserve-3d; }
+.glyph {
+  font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Songti TC", serif;
+  font-weight: 900; line-height: 1; color: #2f6e28;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7), 0 -1px 0 rgba(0, 0, 0, 0.18);
+  user-select: none;
+}
+.shadow {
+  position: absolute; left: 50%; bottom: 4px; width: 70px; height: 14px; margin-left: -35px;
+  border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0));
+  animation: mahjong-shadow 10s infinite; filter: blur(2px);
+}
+:global(.dark) .shadow { background: radial-gradient(closest-side, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0)); }
+
+/* Exactly the original MacBook `rotate` keyframes. 100% (360°) equals 0% (0°), so the loop has no jump. */
+@keyframes mahjong-rotate {
+  0% { transform: rotateX(-20deg) rotateY(0deg) rotateZ(0deg); }
+  5% { transform: rotateX(-20deg) rotateY(-20deg) rotateZ(0deg); }
+  20% { transform: rotateX(30deg) rotateY(200deg) rotateZ(0deg); }
+  25% { transform: rotateX(-60deg) rotateY(150deg) rotateZ(0deg); }
+  60% { transform: rotateX(-20deg) rotateY(130deg) rotateZ(0deg); }
+  65% { transform: rotateX(-20deg) rotateY(120deg) rotateZ(0deg); }
+  80% { transform: rotateX(-20deg) rotateY(375deg) rotateZ(0deg); }
+  85% { transform: rotateX(-20deg) rotateY(357deg) rotateZ(0deg); }
+  87% { transform: rotateX(-20deg) rotateY(360deg) rotateZ(0deg); }
+  100% { transform: rotateX(-20deg) rotateY(360deg) rotateZ(0deg); }
+}
+/* Shadow follows the same keyframe positions (subtler than the MacBook's): it shifts, shrinks and fades with the tilt. */
+@keyframes mahjong-shadow {
+  0%, 87%, 100% { transform: translateX(0) scaleX(1); opacity: 1; }
+  5% { transform: translateX(-4px) scaleX(1.05); opacity: 1; }
+  20% { transform: translateX(-6px) scaleX(0.8); opacity: 0.7; }
+  25% { transform: translateX(6px) scaleX(0.6); opacity: 0.45; }
+  60% { transform: translateX(10px) scaleX(0.95); opacity: 0.9; }
+  80% { transform: translateX(3px) scaleX(1.05); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile { animation: none; transform: rotateX(-20deg) rotateY(-25deg); }
+  .shadow { animation: none; }
+}

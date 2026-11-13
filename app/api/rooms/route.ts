@@ -7,8 +7,8 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const name = cleanName(body.name);
-    if (!name) throw new HttpError(400, "Please enter your name.");
-    const { room, pid, token } = await createRoom(name, cleanName(body.roomName, 40));
+    if (!name) throw new HttpError(400, "Enter a name to continue.");
+    const { room, pid, token } = await createRoom(name, cleanName(body.roomName, 40), body.avatar);
     await setSessionCookie(room.code, pid, token);
     await touch(room.code, pid);
     return NextResponse.json(await roomPayload(room, pid), { headers: NO_STORE });

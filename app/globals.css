@@ -20,6 +20,9 @@
   --disabled-text: #8e8e93;
   --dash: #c7c7cc;
   --overlay: rgba(255, 255, 255, 0.7);
+  --page: #faf9f6;            /* warm off-white page background (light only) */
+  --card: #ffffff;            /* pure-white content surfaces on the warm page */
+  --sage: #e8f3eb;            /* pale sage for illustration areas (use sparingly) */
   color-scheme: light;
 }
 .dark {
@@ -38,11 +41,17 @@
   --dash: #48484a;
   --overlay: rgba(0, 0, 0, 0.6);
   --brand-text: color-mix(in srgb, var(--brand) 70%, white); /* green TEXT only, readable on black */
+  --page: #000000;            /* dark mode stays properly dark */
+  --card: #161618;
+  --sage: rgba(53, 117, 40, 0.16);
   color-scheme: dark;
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-sage: var(--sage);
   --color-surface: var(--surface);
   --color-bubble: var(--bubble);
   --color-ai: var(--ai);
@@ -79,7 +88,7 @@
 @utility t-sub { font-size: 14px; line-height: 21px; }
 @utility t-meta { font-size: 12px; line-height: 18px; }
 
-html, body { background: var(--bg); color: var(--fg); }
+html, body { background: var(--page); color: var(--fg); }
 button, a, input, textarea { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease; }
 :focus-visible:not(input):not(textarea) { outline: 2px solid var(--brand); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
@@ -94,11 +103,16 @@ textarea, input { font-size: 16px; }
   max-width: 430px;
   margin: 0 auto;
   min-height: 100dvh;
-  background: var(--bg);
+  background: var(--page);
   position: relative;
 }
+/* Private AI Assistant: shares the warm page background; its chat surfaces (bubbles, composer) are unchanged. */
+.coach-classic { background: var(--page); min-height: 100dvh; }
+/* Shared motion for avatars appearing (matching) — transform/opacity only. */
+@keyframes mt-pop { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+.mt-pop { animation: mt-pop 260ms cubic-bezier(0.2, 0, 0, 1) both; }
 @media (min-width: 640px) {
-  body { background: var(--surface); }
+  body { background: color-mix(in srgb, var(--page) 94%, var(--fg)); }
   .app-col { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }
 .pb-safe { padding-bottom: max(12px, env(safe-area-inset-bottom)); }

@@ -13,12 +13,12 @@ export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
 }
 
-export function Header({ title, subtitle, onBack, backLabel, right, children }: { title: string; subtitle?: React.ReactNode; onBack?: () => void; backLabel?: string; right?: React.ReactNode; children?: React.ReactNode }) {
+export function Header({ title, subtitle, onBack, backLabel, right, children, titleClassName, backClassName }: { title: string; subtitle?: React.ReactNode; onBack?: () => void; backLabel?: string; right?: React.ReactNode; children?: React.ReactNode; titleClassName?: string; backClassName?: string }) {
   return (
-    <header className="pt-safe sticky top-0 z-20 bg-bg/95 backdrop-blur border-b border-line">
+    <header className="pt-safe sticky top-0 z-20 bg-page/95 backdrop-blur border-b border-line">
       <div className="h-14 px-2 flex items-center gap-1">
         {onBack ? (
-          <button onClick={onBack} aria-label={backLabel || "Back"} className="h-11 min-w-11 px-2 flex items-center gap-0.5 rounded-full text-ink hover:bg-surface shrink-0">
+          <button onClick={onBack} aria-label={backLabel || "Back"} className={cx("h-11 min-w-11 px-2 flex items-center gap-0.5 rounded-full shrink-0", backClassName || "text-ink hover:bg-surface")}>
             <ChevronLeft size={22} strokeWidth={1.75} />
             {backLabel && <span className="t-sub font-medium max-[359px]:sr-only">{backLabel}</span>}
           </button>
@@ -26,7 +26,7 @@ export function Header({ title, subtitle, onBack, backLabel, right, children }: 
           <div className="w-2" />
         )}
         <div className="flex-1 min-w-0 px-1">
-          <div className="t-section truncate">{title}</div>
+          <div className={cx("t-section truncate", titleClassName)}>{title}</div>
           {subtitle && <div className="t-meta text-muted truncate">{subtitle}</div>}
         </div>
         <div className="flex items-center gap-0.5 pr-1 shrink-0">{right}<ThemeToggle /></div>

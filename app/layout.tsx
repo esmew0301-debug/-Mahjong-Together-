@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 
 export const metadata: Metadata = {
   title: "Mahjong Together",
-  description: "Your AI companion for learning new Mahjong traditions with friends.",
+  description: "Play Sichuan Mahjong together.",
 };
 
 export const viewport: Viewport = {

@@ -115,3 +115,19 @@ export function useRoom(code: string) {
 export function openQuestionCount(messages: Msg[], since: number) {
   return messages.filter((m) => m.ts > since && m.sender !== "ai" && m.sender !== "system" && looksLikeQuestion(m.text)).length;
 }
+
+// ---------- profile (this device only; no account, email or photo) ----------
+export interface Profile { name: string; avatar: string }
+export function getProfile(): Profile | null {
+  try {
+    const p = JSON.parse(localStorage.getItem("mt.profile") || "null");
+    return p && typeof p.name === "string" && p.name.trim() ? { name: p.name.trim().slice(0, 24), avatar: String(p.avatar || "leaf") } : null;
+  } catch {
+    return null;
+  }
+}
+export function saveProfile(p: Profile) {
+  try {
+    localStorage.setItem("mt.profile", JSON.stringify({ name: p.name.trim().slice(0, 24), avatar: p.avatar }));
+  } catch {}
+}
