@@ -29,8 +29,14 @@ export default function Home() {
     <div className="min-h-[100dvh] flex flex-col px-4 pt-safe pb-safe">
       <div className="h-14 flex items-center justify-end"><span className="-mr-2"><ThemeToggle /></span></div>
       <div className="pt-2">
-        <h1 className="text-[28px] leading-[36px] font-semibold tracking-[-0.01em]">Mahjong Together</h1>
-        <p className="t-body text-muted mt-1">Play Sichuan Mahjong together.</p>
+        {/* Homepage-only custom wordmark (from the supplied lettering): the transparent artwork is used as a mask over
+            the brand-green token, so it stays sharp on Retina and follows Light/Dark mode. */}
+        <h1 className="m-0">
+          <span className="sr-only">Mahjong Together</span>
+          <span aria-hidden className="block w-[min(276px,100%)] aspect-[1316/221] bg-green-text"
+            style={{ WebkitMask: "url(/brand/mahjong-together-wordmark.png) left center / contain no-repeat", mask: "url(/brand/mahjong-together-wordmark.png) left center / contain no-repeat" }} />
+        </h1>
+        <p className="t-body text-muted mt-2">Play Sichuan Mahjong together.</p>
       </div>
       <div className="flex-1 flex items-center justify-center py-4 min-h-[300px]">
         {/* Homepage only: the animated 3D 發 tile replaces the static hero image (not shown elsewhere). */}
