@@ -25,7 +25,8 @@ async function setQueueCookie(q: QueueName, v: string) {
 // Poll the caller's own queue entry (?queue=class for the shared classroom QR queue).
 export async function GET(req: Request) {
   try {
-    const q = queueName(new URL(req.url).searchParams.get("queue"));
+    const sp = new URL(req.url).searchParams;
+    const q = queueName(sp.get("queue"), sp.get("code"));
     return await reply(await poll(q, await readCookie(q)));
   } catch (e) {
     return fail(e);
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const q = queueName(body.queue);
+    const q = queueName(body.queue, body.code);
     if (body.cancel) return await reply(await cancel(q, await readCookie(q)));
     const { cookie } = await enqueue(q, await readCookie(q), body.name, body.avatar);
     if (cookie) await setQueueCookie(q, cookie);

@@ -1,3 +1,4 @@
+import type { MjState, PublicMj } from "./server/mj";
 export type VariantId = "sichuan" | "riichi" | "cantonese" | "american";
 export type RoomStatus = "lobby" | "variant" | "setup" | "playing" | "hand_review" | "reconciling" | "session_review" | "complete";
 export type AiMode = "live" | "demo" | "unavailable";
@@ -118,6 +119,14 @@ export interface Room {
   matched?: boolean;
   /** Lobby "I'm Ready" per participant (s3 flow). */
   lobbyReady?: Record<string, boolean>;
+  /** Online Sichuan game (server-authoritative; redacted per viewer before sending). */
+  mj?: MjState;
+  /** "Start Playing" readiness after the learning modules. */
+  playReady?: Record<string, boolean>;
+  /** Emoji reactions, quick messages and table questions (public, short). */
+  social?: SocialItem[];
+  /** "Play Again Together" votes after the results. */
+  again?: Record<string, boolean>;
   /** Demo seats' scheduled (staggered) responses: context key → { virtual player id → due time (ms) }. */
   aiPlans?: Record<string, Record<string, number>>;
   /** Ding Que selections made in Step 4 (copied to the hand when play starts). */
@@ -159,9 +168,12 @@ export interface Room {
   endedEarly?: { at: number; fromStatus: RoomStatus; handInProgress: boolean } | null;
 }
 
-export interface PublicRoom extends Omit<Room, "players"> {
+export interface PublicRoom extends Omit<Room, "players" | "mj"> {
   players: PublicPlayer[];
+  /** Online game state as ONE viewer may see it (own hand only; others as counts). */
+  mj?: PublicMj;
 }
+export interface SocialItem { id: string; ts: number; pid: string; kind: "emoji" | "quick" | "ask" | "reply"; text: string }
 
 export interface RoomResponse {
   room: PublicRoom;

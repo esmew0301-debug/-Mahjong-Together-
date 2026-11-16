@@ -71,7 +71,8 @@ export function RoomApp({ code }: { code: string }) {
   const { room: r, me } = room.data;
   if (r.flow === "s3") {
     // Final Sichuan product flow. The Private AI Assistant (Coach) is reused exactly as before.
-    if (r.status === "complete") return <FinalResults r={r} me={me} onHome={() => { forgetRoom(r.code); router.push("/"); }} reflection={null} />;
+    if (r.status === "complete") return <FinalResults r={r} me={me} onHome={() => { forgetRoom(r.code); router.push("/"); }} reflection={null}
+      playAgain={{ mine: !!r.again?.[me], agreed: r.players.filter((p) => r.again?.[p.id]).length, onClick: () => { room.act({ type: "play-again" }).catch(() => {}); } }} />;
     if (view === "coach") return <div className="coach-classic"><Coach r={r} me={me} onBack={() => setView("table")} act={room.act} /></div>;
     return <S3Room data={room.data} actions={room} openCoach={() => setView("coach")} />;
   }

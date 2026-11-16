@@ -36,15 +36,16 @@ export default function Home() {
           <span aria-hidden className="block w-[min(276px,100%)] aspect-[1316/221] bg-green-text"
             style={{ WebkitMask: "url(/brand/mahjong-together-wordmark.png) left center / contain no-repeat", mask: "url(/brand/mahjong-together-wordmark.png) left center / contain no-repeat" }} />
         </h1>
-        <p className="t-body text-muted mt-2">Play Sichuan Mahjong together.</p>
+        <p className="t-body text-muted mt-2">Learn Mahjong. Play Together.</p>
       </div>
       <div className="flex-1 flex items-center justify-center py-4 min-h-[300px]">
         {/* Homepage only: the animated 3D 發 tile replaces the static hero image (not shown elsewhere). */}
         <AnimatedMahjongTile width={132} />
       </div>
       <div className="flex flex-col gap-3 pb-3">
-        <Btn onClick={() => router.push("/present")}>Random Match</Btn>
-        <Btn variant="secondary" onClick={() => router.push("/profile?next=join")}>Join a Room</Btn>
+        <Btn onClick={() => router.push("/profile?next=class")}>Join Room</Btn>
+        <Btn variant="secondary" onClick={() => router.push("/present")}>Random Match</Btn>
+        <button onClick={() => router.push("/profile?next=join")} className="t-sub text-muted min-h-10">Have a private room code?</button>
         {recent && <button onClick={() => router.push(`/room/${recent}`)} className="t-sub text-muted min-h-11">Return to Room {recent}</button>}
       </div>
     </div>

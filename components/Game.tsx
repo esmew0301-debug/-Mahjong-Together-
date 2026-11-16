@@ -655,7 +655,7 @@ export function ReconcilePanel({ r, act, busy, openRecord }: { r: PublicRoom; ac
 }
 
 // ---------- Final results ----------
-export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me: string; onHome: () => void; reflection: React.ReactNode }) {
+export function FinalResults({ r, me, onHome, reflection, playAgain }: { r: PublicRoom; me: string; onHome: () => void; reflection: React.ReactNode; playAgain?: { mine: boolean; agreed: number; onClick: () => void } }) {
   const reduce = useReducedMotion();
   const { totals, wins, kongs, handsPlayed, committed } = useScores(r);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -755,6 +755,11 @@ export function FinalResults({ r, me, onHome, reflection }: { r: PublicRoom; me:
         {reflection}
       </main>
       <div className="sticky bottom-0 z-40 bg-page px-4 pt-3 pb-safe border-t border-line">
+        {playAgain && (
+          <Btn variant="secondary" className="w-full mb-2 bg-card" disabled={playAgain.mine} onClick={playAgain.onClick}>
+            {playAgain.mine ? `Waiting for everyone… (${playAgain.agreed}/4)` : "Play Again Together"}
+          </Btn>
+        )}
         <Btn className="w-full" onClick={onHome}>Back to Home</Btn>
       </div>
     </div>

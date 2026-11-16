@@ -17,6 +17,8 @@ import { DIR_TEXT, tileArt } from "@/lib/tutorial/sichuan-art";
 import { EventCard, HandReviewPanel, ReconcilePanel, RecordEventSheet, ScoresSheet, describeEvent, useScores } from "@/components/Game";
 import { gentleConfetti, markKey, seenKey, smallConfetti } from "@/lib/celebrate";
 import { FourPlayerStatus } from "./FourPlayerStatus";
+import { Quiz } from "./Quiz";
+import { MjTable } from "./MjTable";
 import { WaitingProgressRing } from "@/components/ui/loader-15";
 
 type Actions = ReturnType<typeof useRoom>;
@@ -139,10 +141,10 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
 
 // ----------------------------------------------------------------------------------------- preparation
 const STEP_COPY: Record<string, { n: number; helpLabel: string }> = {
-  "sc-tiles": { n: 1, helpLabel: "How to prepare the tiles" },
-  "sc-wall": { n: 2, helpLabel: "How to build the wall" },
-  "sc-exchange": { n: 3, helpLabel: "How to exchange three tiles" },
-  "sc-dingque": { n: 4, helpLabel: "Need Explanation" },
+  "sc-tiles": { n: 1, helpLabel: "Need Help" },
+  "sc-wall": { n: 2, helpLabel: "Need Help" },
+  "sc-exchange": { n: 3, helpLabel: "Need Help" },
+  "sc-dingque": { n: 4, helpLabel: "Need Help" },
 };
 const SUITS = [{ id: "c", name: "Characters", face: { s: "c", n: 5 } }, { id: "b", name: "Bamboo", face: { s: "b", n: 5 } }, { id: "d", name: "Dots", face: { s: "d", n: 5 } }] as const;
 const SUIT_NAME: Record<string, string> = { c: "Characters", b: "Bamboo", d: "Dots" };
@@ -150,10 +152,10 @@ function MiniTile({ face }: { face: { s: "c" | "b" | "d"; n: number } }) {
   return <svg viewBox="-17 -22 34 50" className="h-9 w-auto" aria-hidden><g dangerouslySetInnerHTML={{ __html: tileArt(face) }} /></svg>;
 }
 const STEP_TEXT: Record<string, { title: string; line: string }> = {
-  "sc-tiles": { title: "Prepare 108 Tiles", line: "Keep only Characters, Bamboo, and Dots." },
-  "sc-wall": { title: "Build Your Wall", line: "Arrange your tiles into the four table walls." },
-  "sc-exchange": { title: "Exchange 3 Tiles", line: "Choose 3 tiles of the same suit and pass them together." },
-  "sc-dingque": { title: "Choose Your Missing Suit", line: "Pick one suit to discard before you can win." },
+  "sc-tiles": { title: "Know Your Tiles", line: "Sichuan Mahjong uses Characters, Bamboo, and Dots." },
+  "sc-wall": { title: "How the Wall Works", line: "Players draw tiles from the shared wall." },
+  "sc-exchange": { title: "Exchange 3 Tiles", line: "Choose three tiles from the same suit." },
+  "sc-dingque": { title: "Choose Your Missing Suit", line: "Clear one suit before you can win." },
 };
 
 function Prep({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions }) {
@@ -167,8 +169,8 @@ function Prep({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions 
   const mine = r.resp[me] === "ready";
   const readyCount = r.players.filter((p) => r.resp[p.id] === "ready").length;
   const anyAI = r.players.some(isAI);
-  const myPick = r.dingQue?.[me];
-  const needsPick = stepId === "sc-dingque" && !myPick;
+  const [quiz, setQuiz] = useState(false);
+  const understand = () => act({ type: "respond", stepId, value: "ready" });
 
   // Help is per player; it only toggles an informational "viewing" flag and never touches confirmations.
   const helpFor = useRef<string | null>(null);
@@ -219,39 +221,25 @@ function Prep({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions 
             <div className="grid grid-cols-3 text-center t-meta text-muted -mt-1"><span>Characters</span><span>Bamboo<br /><span className="text-green-text">example</span></span><span>Dots</span></div>
           </>}
         </div>
-        {stepId === "sc-dingque" && (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="t-section mb-2">{mine ? `Your missing suit: ${SUIT_NAME[myPick || ""] || ""}` : "Your missing suit"}</legend>
-            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Your missing suit">
-              {SUITS.map((x) => (
-                <button key={x.id} type="button" role="radio" aria-checked={myPick === x.id} disabled={mine || busy}
-                  onClick={() => act({ type: "dingque-pick", stepId, suit: x.id })}
-                  className={cx("min-h-[76px] rounded-[14px] border flex flex-col items-center justify-center gap-1 px-1", myPick === x.id ? "border-green bg-green-soft border-[1.5px]" : "border-line bg-card", mine && myPick !== x.id && "opacity-40")}>
-                  <MiniTile face={x.face} />
-                  <span className="t-meta font-medium">{x.name}</span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        )}
-        {anyAI && <p className="t-meta text-muted">This demo includes simulated participants. People at the table handle the physical tiles.</p>}
+        {anyAI && <p className="t-meta text-muted">This demo includes simulated participants.</p>}
         <FourPlayerStatus players={r.players} me={me} countLabel="Ready" doneLabel="Ready" className="pt-1"
           state={(p) => (r.resp[p.id] === "ready" ? "done" : r.viewing?.[p.id] ? "help" : "waiting")} />
       </main>
       <div className="sticky bottom-0 bg-page px-4 pt-3 pb-safe border-t border-line flex flex-col gap-2">
         {error && <p className={ERR + " text-center"} role="alert">{error}</p>}
+        {!mine && <Btn variant="secondary" className="bg-card" disabled={busy} onClick={() => setQuiz(true)}>Test My Knowledge</Btn>}
         <div className="flex gap-2 items-stretch">
           <button type="button" onClick={() => setHelp(true)} aria-label={copy.helpLabel} title={copy.helpLabel}
             className="h-12 w-12 shrink-0 rounded-[14px] border border-line bg-card flex items-center justify-center text-ink hover:bg-hover">
             <CircleHelp size={22} strokeWidth={1.75} />
           </button>
-          <Btn className="flex-1" variant={mine ? "ok" : "primary"} disabled={busy || mine || needsPick} aria-label={stepId === "sc-dingque" ? "I've Chosen" : "I've done this"}
-            onClick={() => act({ type: "respond", stepId, value: "ready", ...(stepId === "sc-dingque" ? { suit: myPick } : {}) })}>
-            <Check size={18} strokeWidth={2.5} /> {mine ? "Done" : stepId === "sc-dingque" ? "I've Chosen" : "I've done this"}
+          <Btn className="flex-1" variant={mine ? "ok" : "primary"} disabled={busy || mine} aria-label="I Understand" onClick={understand}>
+            <Check size={18} strokeWidth={2.5} /> {mine ? "Done" : "I Understand"}
           </Btn>
         </div>
         <p className="t-meta text-muted text-center mb-1 min-h-4" aria-live="polite">{mine && readyCount < 4 ? "Waiting for the group…" : ""}</p>
       </div>
+      {quiz && <Quiz stepId={stepId} onClose={() => setQuiz(false)} onDone={() => { setQuiz(false); understand(); }} />}
     </div>
   );
 }
@@ -291,26 +279,25 @@ function HelpView({ stepId, dir, onBack }: { stepId: string; dir?: string; onBac
       <main className="flex-1 px-4 pt-5 pb-4 flex flex-col gap-4">
         <h1 className="t-app text-green-text">{title}</h1>
         {stepId === "sc-tiles" && <>
-          <Sec h="How to" t="Keep four copies of each numbered tile, 1–9, in all three suits.">
+          <Sec h="How to" t="108 tiles. Three suits. Four copies of every numbered tile.">
             <Frame><ArtVisual id="step-1-help-27-types" /><p className="t-meta text-muted text-center -mt-1">Characters · Bamboo · Dots, 1–9, ×4 each = 108</p></Frame>
           </Sec>
-          <Sec h="Set Aside" t="Remove Winds, Dragons, Flowers, and any extra tiles.">
+          <Sec h="Not Used" t="Winds, Dragons and Flowers are not part of Sichuan Mahjong.">
             <Frame><ArtVisual id="step-1-help-tile-selection" /><div className="grid grid-cols-[2fr_1fr] text-center t-meta text-muted -mt-1"><span>Keep</span><span>Set aside</span></div></Frame>
           </Sec>
           <Sec h="Why" t="This version of Sichuan Mahjong uses 108 suited tiles." />
         </>}
         {stepId === "sc-wall" && <>
-          <Sec h="How to" t="Divide all 108 tiles into four walls around the table.">
+          <Sec h="How to" t="Each stack contains two tiles. The game builds the wall for you.">
             <Frame><ArtVisual id="step-2-help-wall-stacking" /><p className="t-meta text-muted text-center -mt-1">Stack tiles two high · top and bottom walls 14 stacks, left and right 13</p></Frame>
           </Sec>
-          <Sec h="Check" t="Make sure no tiles are left out.">
+          <Sec h="The Wall" t="Top and bottom walls have 14 stacks, left and right 13.">
             <Frame><ArtVisual id="step-2-build-wall" /><p className="t-meta text-muted text-center -mt-1">(14 + 14 + 13 + 13) stacks × 2 = 108 tiles</p></Frame>
           </Sec>
           <Sec h="Why" t="The walls hold the tiles for drawing during play." />
-          <p className="t-meta text-muted px-1">Then pick a dealer and deal as your table usually does: the dealer takes 14 tiles, everyone else 13.</p>
         </>}
         {stepId === "sc-exchange" && <>
-          <Sec h="How to" t="Pick any three tiles from ONE suit: Characters, Bamboo, or Dots.">
+          <Sec h="How to" t="The three tiles must share a suit, but their numbers can differ.">
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-[14px] bg-sage p-2 flex flex-col gap-1"><ArtVisual id="step-3-help-same-suit" /><span className="t-meta font-semibold text-green-text text-center">SAME SUIT ✓</span></div>
               <div className="rounded-[14px] bg-surface p-2 flex flex-col gap-1"><ArtVisual id="step-3-help-mixed-suits" /><span className="t-meta font-semibold text-muted text-center">MIXED SUITS ✕</span></div>
@@ -322,7 +309,7 @@ function HelpView({ stepId, dir, onBack }: { stepId: string; dir?: string; onBac
           <Sec h="Why" t="The exchange adds variety to starting hands." />
         </>}
         {stepId === "sc-dingque" && <>
-          <Sec h="How to" t="Choose one suit as your missing suit. You must discard all tiles of that suit before winning.">
+          <Sec h="How to" t="Choose one suit and discard its tiles during play.">
             <Frame><ArtVisual id="step-4-ding-que" /><div className="grid grid-cols-3 text-center t-meta text-muted -mt-1"><span>Characters</span><span className="text-green-text">Missing suit</span><span>Dots</span></div></Frame>
           </Sec>
           <Sec h="Example" t="If you choose Bamboo, discard all Bamboo tiles before declaring a win.">
@@ -391,6 +378,33 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
   const iWon = !!r.hand?.winners.includes(me);
   const myPending = pendingWins.some((e) => e.actor === me);
 
+  const endOverlays = (
+    <>
+      {declined && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 text-center bg-card border border-line rounded-[16px] px-4 py-3 shadow-card" role="status">
+          <p className="t-section text-green-text">Game Continues</p>
+          <p className="t-sub text-muted">Not everyone agreed to end the session.</p>
+        </div>
+      )}
+      {r.endProposal && <EndVote r={r} me={me} act={act} busy={busy} />}
+      <Sheet open={endAsk} onClose={() => setEndAsk(false)} title="End the Game?">
+        <p className="t-body">Everyone must agree to end the session.</p>
+        <div className="grid grid-cols-1 gap-2 mt-5">
+          <Btn disabled={busy} onClick={() => { setEndAsk(false); act({ type: "end-propose" }); }}>Yes, End Game</Btn>
+          <Btn variant="secondary" onClick={() => setEndAsk(false)}>Keep Playing</Btn>
+        </div>
+      </Sheet>
+    </>
+  );
+  // The online game table (desktop-first). Shown once the hand is dealt; review/end flows keep their screens.
+  if (playing && r.mj) return (
+    <>
+      <Confetti ref={confettiRef} manualstart globalOptions={confettiOpts} className="pointer-events-none fixed inset-0 z-50 w-full h-full" aria-hidden />
+      <MjTable r={r} me={me} act={act} busy={busy} error={error} openCoach={openCoach} onEnd={() => setEndAsk(true)} overlays={endOverlays} />
+    </>
+  );
+  const startReady = !!r.playReady?.[me];
+
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Confetti ref={confettiRef} manualstart globalOptions={confettiOpts} className="pointer-events-none fixed inset-0 z-30 w-full h-full" aria-hidden />
@@ -402,17 +416,15 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
         {playing && pendingWins.length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 min-h-[38dvh]">
             <h1 className="text-[26px] leading-[34px] font-semibold text-green-text">You&apos;re Ready to Play!</h1>
-            <p className="t-body text-muted">Have fun!</p>
-            <button onClick={openCoach} className="t-sub text-muted mt-4 min-h-11 underline-offset-4 hover:underline">Need help? Open your Private Assistant.</button>
+            <p className="t-body text-muted">Let&apos;s try a game together.</p>
+            <div className="w-full max-w-[320px] mt-4 flex flex-col gap-2">
+              <Btn disabled={busy || startReady} onClick={() => act({ type: "mj-start" })}>{startReady ? "Waiting for everyone…" : "Start Playing"}</Btn>
+              <FourPlayerStatus players={r.players} me={me} doneLabel="Ready" state={(p) => (r.playReady?.[p.id] ? "done" : "waiting")} />
+            </div>
+            <button onClick={openCoach} className="t-sub text-muted mt-2 min-h-11 underline-offset-4 hover:underline">Need help? Open your Private Assistant.</button>
           </div>
         )}
-        {declined && (
-          <div className="text-center bg-card border border-line rounded-[16px] px-4 py-3" role="status">
-            <p className="t-section text-green-text">Game Continues</p>
-            <p className="t-sub text-muted">Not everyone agreed to end the session.</p>
-          </div>
-        )}
-        {(playing || r.status === "hand_review") && (
+        {(r.status === "hand_review") && (
           <button onClick={() => setScores(true)} className="self-center flex items-center gap-2 h-9 px-3 rounded-full border border-line bg-card t-sub">
             <span className="text-muted">Your points</span><span className="font-semibold tabular-nums">{signed(myPts)} pts</span>
             <span className="text-muted">· Hand {r.hand?.n ?? 1}</span>
@@ -440,22 +452,14 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
       </main>
       {playing && (
         <div className="sticky bottom-0 bg-page px-4 pt-3 pb-safe border-t border-line">
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <Btn disabled={busy || iWon || myPending} onClick={() => setWin({})}>Win</Btn>
+          <div className="grid grid-cols-1 gap-2 mb-3">
             <Btn variant="secondary" className="bg-card" disabled={busy || !!r.endProposal} onClick={() => setEndAsk(true)}>End Game</Btn>
           </div>
         </div>
       )}
 
       {win && <WinFlow r={r} me={me} act={act} busy={busy} revise={win.revise} onClose={() => setWin(null)} openCoach={openCoach} />}
-      {r.endProposal && <EndVote r={r} me={me} act={act} busy={busy} />}
-      <Sheet open={endAsk} onClose={() => setEndAsk(false)} title="End the Game?">
-        <p className="t-body">Everyone must agree to finish this session.</p>
-        <div className="grid grid-cols-1 gap-2 mt-5">
-          <Btn disabled={busy} onClick={() => { setEndAsk(false); act({ type: "end-propose" }); }}>Yes, End Game</Btn>
-          <Btn variant="secondary" onClick={() => setEndAsk(false)}>Keep Playing</Btn>
-        </div>
-      </Sheet>
+      {endOverlays}
       <ScoresSheet r={r} me={me} open={scores} onClose={() => setScores(false)} />
       <RecordEventSheet r={r} me={me} open={record} onClose={() => setRecord(false)} act={act} busy={busy} />
     </div>

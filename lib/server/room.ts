@@ -7,6 +7,7 @@ import {
 } from "../variants";
 import { entryForStage } from "../mahjong/intent-matcher";
 import { applyGameAction, initGame } from "./game";
+import { applyMjAction, dealMj, mjTick, redactMj } from "./mj";
 import { displayName } from "../names";
 
 export class HttpError extends Error {
@@ -161,8 +162,8 @@ export function presenceOf(pres: Record<string, string>, pid: string): PublicPla
   const age = Date.now() - t;
   return age < 8000 ? "online" : age < 45000 ? "reconnecting" : "offline";
 }
-export function publicRoom(room: Room, pres: Record<string, string>): PublicRoom {
-  return { ...room, players: room.players.map(({ tokenHash: _t, ...p }) => ({ ...p, presence: p.kind === "virtual" ? "online" : presenceOf(pres, p.id) })) };
+export function publicRoom(room: Room, pres: Record<string, string>, viewer = ""): PublicRoom {
+  return { ...room, mj: redactMj(room.mj, viewer), players: room.players.map(({ tokenHash: _t, ...p }) => ({ ...p, presence: p.kind === "virtual" ? "online" : presenceOf(pres, p.id) })) };
 }
 
 // ---------- group engine ----------
@@ -238,6 +239,7 @@ export function afterExplanation(r: Room, summary: boolean, topicId?: string, to
 export function applyAction(r: Room, pid: string, a: { type: string; [k: string]: unknown }, pres: Record<string, string>) {
   applyActionInner(r, pid, a, pres);
   autoVirtual(r);
+  mjTick(r);
 }
 
 const isVirtual = (r: Room, id: string) => r.players.find((p) => p.id === id)?.kind === "virtual";
@@ -268,6 +270,7 @@ function delayFor(r: Room, ctx: string, botId: string) {
 export function nextVirtualDue(r: Room): number | null {
   let min: number | null = null;
   for (const plan of Object.values(r.aiPlans || {})) for (const t of Object.values(plan)) if (min === null || t < min) min = t;
+  if (r.mj?.due != null && (min === null || r.mj.due < min)) min = r.mj.due; // simulated moves / claim timeouts
   return min;
 }
 
@@ -313,6 +316,10 @@ export function autoVirtual(r: Room, now = Date.now()) {
       }
       if (r.status === "session_review" && r.finalReview && due(`final:${r.finalReview.ledgerVersion}`, "final", b, !r.finalReview.resp[b]))
         run({ type: "final-respond", ledgerVersion: r.ledgerVersion || 0, value: "confirm" });
+      // online game: simulated seats are always ready to start / continue / play again
+      if (r.status === "playing" && !r.mj && !r.playReady?.[b]) run({ type: "mj-start" });
+      if (r.mj?.phase === "ended" && r.status === "playing" && !r.mj.nextReady?.[b]) run({ type: "mj-next" });
+      if (r.status === "complete" && r.again && !r.again[b]) run({ type: "play-again" });
       if (r.status === "hand_review" && !r.nextDealerVotes?.[b]) {
         const humanVote = humans.map((h) => r.nextDealerVotes?.[h]).find(Boolean); // follow a real player's choice
         if (humanVote) run({ type: "next-dealer", dealerId: humanVote });
@@ -329,7 +336,7 @@ function applyActionInner(r: Room, pid: string, a: { type: string; [k: string]: 
   const me = nameOf(r, pid);
   const isHost = r.hostId === pid;
   const step = stepById(r.stepId);
-  if (r.status === "complete" && a.type !== "reflect" && a.type !== "react") throw new HttpError(409, "This session has ended.");
+  if (r.status === "complete" && !["reflect", "react", "play-again", "social"].includes(String(a.type))) throw new HttpError(409, "This session has ended.");
   // After the group agreed to end, play is stopped: only chat, reactions, reconciliation and final review remain.
   const STOPPED_OK = ["message", "react", "event-respond", "event-revise", "event-submit", "final-respond", "final-review-start", "finish-cancel", "remove"];
   if ((r.status === "reconciling" || (r.status === "session_review" && r.endedEarly)) && !STOPPED_OK.includes(String(a.type)))
@@ -432,12 +439,7 @@ function applyActionInner(r: Room, pid: string, a: { type: string; [k: string]: 
         if (val === "done") val = "ready";
         if (val !== "ready") throw new HttpError(400, "Invalid response");
         if (r.resp[pid] === "ready") return; // repeated taps / retries: no duplicate confirmation
-        if (step.id === "sc-dingque") {
-          // Each player's own choice: saved with their single confirmation, locked afterwards.
-          const suit = a.suit !== undefined ? String(a.suit) : r.dingQue?.[pid];
-          if (suit !== "c" && suit !== "b" && suit !== "d") throw new HttpError(400, "Choose your missing suit first.");
-          r.dingQue = { ...(r.dingQue || {}), [pid]: suit };
-        }
+        // (Step 4 is a learning module now; the real missing suit is chosen inside the online game.)
       }
       r.resp[pid] = val;
       if (r.viewing) delete r.viewing[pid];
@@ -476,6 +478,18 @@ function applyActionInner(r: Room, pid: string, a: { type: string; [k: string]: 
       const suit = String(a.suit);
       if (suit !== "c" && suit !== "b" && suit !== "d") throw new HttpError(400, "Unknown suit");
       r.dingQue = { ...(r.dingQue || {}), [pid]: suit };
+      return;
+    }
+    case "play-again": {
+      // "Play Again Together": when everyone agrees, the same table starts a fresh session (new scores).
+      if (r.status !== "complete") return;
+      r.again = { ...(r.again || {}), [pid]: true };
+      if (r.players.every((p) => r.again![p.id])) {
+        r.status = "playing"; r.again = undefined; r.endedEarly = null; r.finalReview = null; r.endProposal = null;
+        initGame(r); r.mj = undefined; r.playReady = {};
+        push(r, msg({ sender: "system", text: "Everyone agreed to play again." }));
+        dealMj(r);
+      }
       return;
     }
     case "step-help": {
@@ -554,6 +568,7 @@ function applyActionInner(r: Room, pid: string, a: { type: string; [k: string]: 
     }
     default:
       if (applyGameAction(r, pid, a)) return;
+      if (applyMjAction(r, pid, a)) return;
       throw new HttpError(400, "Unknown action");
   }
 }

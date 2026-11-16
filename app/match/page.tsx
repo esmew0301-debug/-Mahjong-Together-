@@ -13,10 +13,11 @@ type S = { status: "none" | "waiting" | "matched"; filled?: number; code?: strin
 
 // One join request per page load, even when React mounts the effect twice in development.
 let inflight: { at: number; key: string; p: Promise<S> } | null = null;
-function joinOnce(name: string, avatar: string, queue: string): Promise<S> {
-  if (inflight && inflight.key === queue && Date.now() - inflight.at < 5000) return inflight.p;
-  const p = api<S>("/api/match", { name, avatar, queue });
-  inflight = { at: Date.now(), key: queue, p };
+function joinOnce(name: string, avatar: string, queue: string, code: string): Promise<S> {
+  const key = `${queue}:${code}`;
+  if (inflight && inflight.key === key && Date.now() - inflight.at < 5000) return inflight.p;
+  const p = api<S>("/api/match", { name, avatar, queue, code });
+  inflight = { at: Date.now(), key, p };
   p.catch(() => { inflight = null; });
   return p;
 }
@@ -27,8 +28,10 @@ export default function MatchPage() {
 
 function Match() {
   const router = useRouter();
-  const queue = useSearchParams().get("queue") === "class" ? "class" : "default";
-  const qs = queue === "class" ? "?queue=class" : "";
+  const sp = useSearchParams();
+  const queue = sp.get("queue") === "class" ? "class" : "default";
+  const code = queue === "class" ? (sp.get("code") || "") : "";
+  const qs = queue === "class" ? `?queue=class${code ? `&code=${encodeURIComponent(code)}` : ""}` : "";
   // Scanning the classroom QR again while already seated at an active table: offer to resume instead of re-queueing.
   const [resume, setResume] = useState<string | null | undefined>(queue === "class" ? undefined : null);
   // Countdown from the SERVER's remaining time (resynced on every poll; display only).
@@ -49,7 +52,7 @@ function Match() {
 
   useEffect(() => {
     const p = getProfile();
-    if (!p) { router.replace(`/profile?next=match${queue === "class" ? "&queue=class" : ""}`); return; }
+    if (!p) { router.replace(`/profile?next=match${queue === "class" ? `&queue=class${code ? `&code=${encodeURIComponent(code)}` : ""}` : ""}`); return; }
     if (resume !== null) return; // waiting for the resume check / the player's choice
     stop.current = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -76,18 +79,18 @@ function Match() {
       if (stop.current) return;
       try {
         let j = await api<S>(`/api/match${qs}`);
-        if (j.status === "none") j = await api<S>("/api/match", { name: p.name, avatar: p.avatar, queue }); // entry expired: rejoin
+        if (j.status === "none") j = await api<S>("/api/match", { name: p.name, avatar: p.avatar, queue, code }); // entry expired: rejoin
         if (handle(j)) return;
         setErr(null);
       } catch (e) { setErr((e as Error).message); }
       if (!stop.current) timer = setTimeout(tick, 1000);
     };
     // Joining is idempotent: a refresh resumes the same queue entry instead of creating another.
-    joinOnce(p.name, p.avatar, queue)
+    joinOnce(p.name, p.avatar, queue, code)
       .then((j) => { if (!handle(j)) timer = setTimeout(tick, 1000); })
       .catch((e) => { setErr((e as Error).message); timer = setTimeout(tick, 1500); });
     return () => { stop.current = true; clearTimeout(timer); };
-  }, [router, queue, qs, resume]);
+  }, [router, queue, qs, code, resume]);
 
   useEffect(() => {
     if (s.status !== "waiting" || typeof s.deadlineInMs !== "number") { setLeft(null); return; }
@@ -103,7 +106,7 @@ function Match() {
     setLeaving(true);
     stop.current = true;
     try {
-      const j = await api<S>("/api/match", { cancel: true, queue });
+      const j = await api<S>("/api/match", { cancel: true, queue, code });
       if (j.status === "matched" && j.code) { rememberRoom(j.code); router.replace(`/room/${j.code}`); return; } // table formed at that moment
     } catch {}
     router.push("/");

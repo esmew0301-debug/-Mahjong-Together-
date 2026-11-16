@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { autoVirtual, mutate, nextVirtualDue, touch } from "@/lib/server/room";
+import { mjTick } from "@/lib/server/mj";
 import { fail, loadAuthed, roomPayload, NO_STORE } from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ code: string }>
     await touch(room.code, pid);
     // Apply any staggered demo-seat responses that have become due (server-authoritative, idempotent).
     const due = nextVirtualDue(room);
-    if (due !== null && due <= Date.now()) room = await mutate(room.code, (r) => autoVirtual(r));
+    if (due !== null && due <= Date.now()) room = await mutate(room.code, (r) => { autoVirtual(r); mjTick(r); });
     const since = Number(new URL(req.url).searchParams.get("v"));
     if (since === room.v) {
       // Unchanged: send only presence to keep polling cheap.

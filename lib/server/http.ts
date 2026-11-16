@@ -33,7 +33,7 @@ export async function requireMember(rawCode: string) {
 export async function roomPayload(room: Room, pid: string) {
   const pres = await presenceMap(room.code);
   pres[pid] = String(Date.now());
-  return { room: publicRoom(room, pres), me: pid, backend };
+  return { room: publicRoom(room, pres, pid), me: pid, backend };
 }
 
 export async function setSessionCookie(code: string, pid: string, token: string) {

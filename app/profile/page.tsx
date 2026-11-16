@@ -10,7 +10,7 @@ import { AVATAR_OPTIONS, EMOJI_FONT, avatarOf } from "@/components/s3/avatar";
 function ProfileForm() {
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") === "join" ? "join" : "match";
+  const next = sp.get("next") === "join" ? "join" : sp.get("next") === "class" ? "class" : "match";
   const code = (sp.get("code") || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 8); // QR target room is kept
   const queue = sp.get("queue") === "class" ? "class" : ""; // classroom QR: keep the shared-queue intent
   const [name, setName] = useState("");
@@ -25,7 +25,8 @@ function ProfileForm() {
     const n = name.replace(/\s+/g, " ").trim();
     if (!n) return setErr("Enter a name to continue.");
     saveProfile({ name: n, avatar });
-    if (next === "match") router.push(queue ? `/match?queue=${queue}` : "/match");
+    if (next === "class") router.push("/classroom");
+    else if (next === "match") router.push(queue ? `/match?queue=${queue}${sp.get("code") ? `&code=${encodeURIComponent(sp.get("code")!)}` : ""}` : "/match");
     else router.push(code ? `/join/${code}?auto=1` : "/join");
   };
 

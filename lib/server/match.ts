@@ -21,15 +21,29 @@ const KEEP_ASSIGNED_MS = 10 * 60_000;
 export const MATCH_TIMEOUT_MS = Math.max(1000, Math.min(120_000, Number(process.env.DEMO_MATCH_TIMEOUT_MS) || 10_000));
 export const CLASS_WINDOW_MS = Math.max(3000, Math.min(600_000, Number(process.env.CLASS_MATCH_WINDOW_MS) || 25_000));
 
-export type QueueName = "default" | "class";
+/** Shared classroom matchmaking codes (NOT room ids). Case-insensitive; the first one is the classroom QR queue. */
+export const CLASSROOM_CODES = (process.env.CLASSROOM_CODES || "COGS123").split(",").map((c) => normalizeClassCode(c)).filter(Boolean);
+export function normalizeClassCode(raw: unknown) { return String(raw ?? "").trim().toUpperCase().replace(/\s+/g, "").slice(0, 24); }
+export const validClassCode = (raw: unknown) => { const c = normalizeClassCode(raw); return CLASSROOM_CODES.includes(c) ? c : null; };
+
+export type QueueName = "default" | `class:${string}`;
 interface QueueCfg { name: QueueName; key: string; cookie: string; windowMs: number; staleMs: number }
-const QUEUES: Record<QueueName, QueueCfg> = {
-  // pages poll every 1s; a closed tab drops out quickly
-  default: { name: "default", key: "mt:match:queue", cookie: "mt_q", windowMs: MATCH_TIMEOUT_MS, staleMs: 8_000 },
+const DEFAULT_Q: QueueCfg = { name: "default", key: "mt:match:queue", cookie: "mt_q", windowMs: MATCH_TIMEOUT_MS, staleMs: 8_000 }; // pages poll every 1s
+function cfgFor(q: QueueName): QueueCfg {
+  if (q === "default") return DEFAULT_Q;
+  const code = q.slice(6);
+  const first = code === CLASSROOM_CODES[0]; // the original classroom queue (shared with the QR code)
   // classroom phones may briefly switch apps (camera, lock screen): keep their place a little longer
-  class: { name: "class", key: "mt:match:queue:class", cookie: "mt_q_class", windowMs: CLASS_WINDOW_MS, staleMs: 45_000 },
+  return { name: q, key: first ? "mt:match:queue:class" : `mt:match:queue:class:${code}`, cookie: first ? "mt_q_class" : `mt_q_class_${code}`, windowMs: CLASS_WINDOW_MS, staleMs: 45_000 };
+}
+const QUEUES = new Proxy({} as Record<QueueName, QueueCfg>, { get: (_t, k) => cfgFor(String(k) as QueueName) });
+/** "?queue=class" (QR) → the first classroom code; "?queue=class&code=X" → classroom X if valid; otherwise default. */
+export const queueName = (raw: unknown, code?: unknown): QueueName => {
+  if (raw !== "class") return "default";
+  const c = code === undefined || code === null || code === "" ? CLASSROOM_CODES[0] : validClassCode(code);
+  if (!c) throw new HttpError(404, "That classroom code wasn't found. Check it with your instructor.");
+  return `class:${c}`;
 };
-export const queueName = (raw: unknown): QueueName => (raw === "class" ? "class" : "default");
 export const queueCookie = (q: QueueName) => QUEUES[q].cookie;
 
 interface Entry {
