@@ -89,6 +89,8 @@
 @utility t-meta { font-size: 12px; line-height: 18px; }
 
 html, body { background: var(--page); color: var(--fg); }
+/* Game screen: no gameplay text below 14px */
+[data-mj-table] .t-meta { font-size: 14px; line-height: 20px; }
 button, a, input, textarea { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease; }
 :focus-visible:not(input):not(textarea) { outline: 2px solid var(--brand); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {

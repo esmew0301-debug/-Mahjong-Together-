@@ -45,7 +45,8 @@ export function Danmaku({ items, players }: { items: SocialItem[]; players: Publ
   const pump = () => {
     const now = Date.now();
     let changed = false;
-    while (queue.current.length && liveRef.current.length < MAX) {
+    const max = (box.current?.clientWidth || 800) < 600 ? 3 : MAX;
+    while (queue.current.length && liveRef.current.length < max) {
       // pick the lane that has been free the longest (reduces overlap when several people send at once)
       const lane = laneFree.current.indexOf(Math.min(...laneFree.current));
       const it = queue.current.shift()!;
@@ -68,7 +69,7 @@ export function Danmaku({ items, players }: { items: SocialItem[]; players: Publ
         <div key={l.id} data-float-id={l.id}
           className={reduce ? "mt-fade" : "mt-danmaku"}
           style={{ position: "absolute", top: `${l.lane * 34}%`, left: reduce ? "50%" : "100%", ["--dist" as string]: `-${w + 420}px`, transform: reduce ? "translateX(-50%)" : undefined }}>
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[rgba(255,253,247,0.92)] text-[#1c1c1e] border border-white/60 shadow-[0_2px_10px_rgba(0,0,0,0.15)] px-3 py-1 text-[13px] leading-5">
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[rgba(255,253,247,0.92)] text-[#1c1c1e] border border-white/60 shadow-[0_2px_10px_rgba(0,0,0,0.15)] px-3 py-1 text-[14px] leading-5">
             <span style={{ ...EMOJI_FONT, fontSize: 15 }}>{emojiFor(l.who || {})}</span>
             <b className="font-semibold">{l.who?.name || "Player"}:</b>
             <span style={l.emoji ? { ...EMOJI_FONT, fontSize: 16 } : undefined}>{l.text}</span>
