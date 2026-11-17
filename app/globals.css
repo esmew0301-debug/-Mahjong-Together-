@@ -127,3 +127,25 @@ textarea, input { font-size: 16px; }
 .pt-safe { padding-top: env(safe-area-inset-top); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* ---------- Mahjong Together 4.0: desktop pages (homepage, Spectator Mode, host) escape the phone column ---------- */
+.app-col:has([data-wide]) { max-width: none; border: 0; }
+@media (min-width: 640px) { body:has([data-wide]) { background: var(--page); } }
+[data-wide] .t-meta { font-size: 14px; line-height: 20px; } /* no main-interface text below 14px */
+/* Spectator table: one tile unit scales with the viewport so the whole table fits a laptop screen without scrolling. */
+.spec-table {
+  --t: clamp(19px, min(2.05vw, 3.3vh), 40px);
+  --felt: #1f5c3b; --felt-edge: #154a2e; --felt-line: rgba(255, 255, 255, 0.14);
+  background: radial-gradient(120% 90% at 50% 40%, #2a6e48 0%, var(--felt) 55%, #19513a 100%);
+  box-shadow: inset 0 0 0 10px var(--felt-edge), inset 0 0 0 11px var(--felt-line), 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+:root.dark .spec-table { --felt: #174a30; --felt-edge: #0f3622; }
+.spec-dim { filter: brightness(0.72) saturate(0.8); transition: filter 200ms ease; }
+.spec-hl { position: relative; z-index: 2; filter: none !important; }
+.spec-hl::after { content: ""; position: absolute; inset: -4px; border-radius: 8px; border: 3px solid #ffd166; box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.35), 0 0 18px rgba(255, 209, 102, 0.6); pointer-events: none; }
+@keyframes spec-in { from { opacity: 0; transform: translateY(-6px) scale(0.92); } to { opacity: 1; transform: none; } }
+.spec-new { animation: spec-in 320ms cubic-bezier(0.2, 0, 0, 1) both; }
+@keyframes spec-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.55); } }
+.spec-last { animation: spec-pulse 1.6s ease 2; border-radius: 6px; }
+@keyframes plus-one { 0% { opacity: 0; transform: translateY(4px) scale(0.8); } 25% { opacity: 1; transform: translateY(-6px) scale(1); } 100% { opacity: 0; transform: translateY(-16px); } }
+.plus-one { animation: plus-one 650ms ease-out forwards; }

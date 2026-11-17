@@ -109,6 +109,7 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
           <h1 className="t-app text-green-text">Your Table</h1>
           <p className="t-sub text-muted mt-0.5">Room {r.code} · Sichuan Mahjong</p>
         </div>
+        <TeachingNotice r={r} />
         <FourPlayerStatus players={r.players} me={me} showOpenSeats countLabel="Ready" doneLabel="Ready"
           state={(p) => (ready[p.id] ? "done" : "waiting")} />
         <p className="t-sub text-muted text-center -mt-3" aria-live="polite">{all ? "Everyone's ready." : n < 4 ? `${n} of 4 seats filled · ${4 - n} more to join` : mine ? "Waiting for the group…" : "Tap I'm Ready when you're at the table."}</p>
@@ -135,6 +136,17 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
           {/localhost|127\.0\.0\.1/.test(url) && <p className="t-meta text-muted text-center">Other phones can't open localhost. Open the site from this computer's network address to share the QR code.</p>}
         </div>
       </Sheet>
+    </div>
+  );
+}
+
+/** Classroom teaching game disclosure — shown to players BEFORE the first hand only (never during play). */
+function TeachingNotice({ r }: { r: PublicRoom }) {
+  if (!r.teaching || r.mj) return null;
+  return (
+    <div className="rounded-[14px] border border-green bg-green-soft px-4 py-3 flex flex-col gap-0.5" role="note" data-teaching-notice>
+      <p className="t-sub font-semibold text-green-text">Classroom Teaching Game</p>
+      <p className="t-sub">This is a classroom teaching game. Authorized spectators can view all four hands to learn from the session.</p>
     </div>
   );
 }
@@ -189,6 +201,7 @@ function Prep({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions 
     <div className="min-h-[100dvh] flex flex-col">
       <Header title="Your Table" titleClassName="text-green-text" subtitle={`Sichuan Mahjong${anyAI ? " · Demo AI seats" : ""}`} onBack={() => router.push("/")} />
       <main className="flex-1 px-4 pt-5 pb-4 flex flex-col gap-5">
+        {copy.n === 1 && <TeachingNotice r={r} />}
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <span className="t-meta text-muted font-medium">Step {copy.n} of 4</span>
@@ -417,6 +430,7 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 min-h-[38dvh]">
             <h1 className="text-[26px] leading-[34px] font-semibold text-green-text">You&apos;re Ready to Play!</h1>
             <p className="t-body text-muted">Let&apos;s try a game together.</p>
+            <div className="w-full max-w-[360px] mt-3 text-left"><TeachingNotice r={r} /></div>
             <div className="w-full max-w-[320px] mt-4 flex flex-col gap-2">
               <Btn disabled={busy || startReady} onClick={() => act({ type: "mj-start" })}>{startReady ? "Waiting for everyone…" : "Start Playing"}</Btn>
               <FourPlayerStatus players={r.players} me={me} doneLabel="Ready" state={(p) => (r.playReady?.[p.id] ? "done" : "waiting")} />

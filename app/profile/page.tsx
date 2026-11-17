@@ -10,7 +10,7 @@ import { AVATAR_OPTIONS, EMOJI_FONT, avatarOf } from "@/components/s3/avatar";
 function ProfileForm() {
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") === "join" ? "join" : sp.get("next") === "class" ? "class" : "match";
+  const next = sp.get("next") === "join" ? "join" : sp.get("next") === "class" ? "class" : sp.get("next") === "watch" ? "watch" : "match";
   const code = (sp.get("code") || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 8); // QR target room is kept
   const queue = sp.get("queue") === "class" ? "class" : ""; // classroom QR: keep the shared-queue intent
   const [name, setName] = useState("");
@@ -26,6 +26,7 @@ function ProfileForm() {
     if (!n) return setErr("Enter a name to continue.");
     saveProfile({ name: n, avatar });
     if (next === "class") router.push("/classroom");
+    else if (next === "watch") router.push("/watch");
     else if (next === "match") router.push(queue ? `/match?queue=${queue}${sp.get("code") ? `&code=${encodeURIComponent(sp.get("code")!)}` : ""}` : "/match");
     else router.push(code ? `/join/${code}?auto=1` : "/join");
   };
@@ -36,7 +37,7 @@ function ProfileForm() {
       <form className="flex-1 flex flex-col px-4 pt-4 gap-6" onSubmit={(e) => { e.preventDefault(); go(); }}>
         <div>
           <h1 className="t-app text-green-text">Create Your Profile</h1>
-          <p className="t-body text-muted mt-1">Choose how others see you at the table.</p>
+          <p className="t-body text-muted mt-1">{next === "watch" ? "Choose how other viewers see you." : "Choose how others see you at the table."}</p>
         </div>
         <label className="flex flex-col gap-1.5">
           <span className="t-sub font-medium">Your Name</span>
@@ -44,7 +45,7 @@ function ProfileForm() {
             aria-invalid={!!err} className="h-12 px-4 rounded-xl border border-line bg-card outline-none focus:border-green" />
         </label>
         <fieldset className="flex flex-col gap-2">
-          <legend className="t-sub font-medium mb-2">Choose an Avatar</legend>
+          <legend className="t-sub font-medium mb-2">{next === "watch" ? "Choose an Emoji Avatar" : "Choose an Avatar"}</legend>
           <div className="grid grid-cols-4 gap-3 justify-items-center" role="radiogroup" aria-label="Choose an Avatar">
             {AVATAR_OPTIONS.map(({ id, label, emoji }) => {
               const on = avatar === id;

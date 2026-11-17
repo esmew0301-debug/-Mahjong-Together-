@@ -1,4 +1,5 @@
 import type { MjState, PublicMj } from "./server/mj";
+import type { SpecEvent, SpecSnap } from "./watch/types";
 export type VariantId = "sichuan" | "riichi" | "cantonese" | "american";
 export type RoomStatus = "lobby" | "variant" | "setup" | "playing" | "hand_review" | "reconciling" | "session_review" | "complete";
 export type AiMode = "live" | "demo" | "unavailable";
@@ -133,6 +134,15 @@ export interface Room {
   dingQue?: Record<string, "c" | "b" | "d">;
   /** Last declined End Game proposal, so every phone can show "The game will continue." once. */
   endDeclined?: { id: string; by: string; at: number } | null;
+  /** Classroom this room was matched in (e.g. "COGS123"); undefined for private rooms. */
+  classroom?: string;
+  /** Classroom teaching mode: authorized spectators may view all four hands. Disclosed to players before play. */
+  teaching?: { classroom: string; since: number } | null;
+  /** SERVER-ONLY spectator feed (bounded) and its sequence counter — stripped from every player response. */
+  feed?: SpecEvent[];
+  feedSeq?: number;
+  /** SERVER-ONLY transient: snapshots staged during one mutation; removed before the room is written. */
+  _snaps?: SpecSnap[];
   code: string;
   name: string;
   createdAt: number;
@@ -168,7 +178,7 @@ export interface Room {
   endedEarly?: { at: number; fromStatus: RoomStatus; handInProgress: boolean } | null;
 }
 
-export interface PublicRoom extends Omit<Room, "players" | "mj"> {
+export interface PublicRoom extends Omit<Room, "players" | "mj" | "feed" | "feedSeq" | "_snaps"> {
   players: PublicPlayer[];
   /** Online game state as ONE viewer may see it (own hand only; others as counts). */
   mj?: PublicMj;

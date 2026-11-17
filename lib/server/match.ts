@@ -118,7 +118,7 @@ async function processQueue(c: QueueCfg) {
       return;
     }
     const made = [];
-    for (const g of groups) made.push({ g, ...(await createMatchedRoom(g.map((e) => ({ name: e.name, avatar: e.avatar })))) });
+    for (const g of groups) made.push({ g, ...(await createMatchedRoom(g.map((e) => ({ name: e.name, avatar: e.avatar })), c.name.startsWith("class:") ? c.name.slice(6) : undefined)) });
     for (const m of made)
       m.g.forEach((e, i) => {
         const d = draft.entries.find((x) => x.id === e.id)!;

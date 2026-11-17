@@ -3,6 +3,7 @@ import crypto from "crypto";
 import type { GameEvent, LedgerEntry, Room } from "../types";
 import { HttpError, msg, nameOf, push, uid } from "./room";
 import { winFan } from "../scoring/sichuan";
+import { emit } from "./feed";
 import {
   type Meld, type Suit, SUITS, SUIT_NAME, allTiles, canKong, canPung, canWinWith, concealedKongKeys, keyOf, legalDiscards,
   pickExchange, pickMissing, sortTiles, suggestDiscard, suitOf, tileName, tilesOfKey, winInfo,
@@ -75,6 +76,7 @@ export function dealMj(r: Room, dealer?: string) {
     exchange: {}, received: {}, dq: {}, last: null, claims: {}, claimUntil: null, winners: [], due: Date.now() + BOT_MS, log: [],
   };
   log(r.mj, `Hand ${r.mj.hand}: ${nameOf(r, d)} deals. Choose 3 tiles of one suit to exchange.`);
+  emit(r, { type: "deal", actor: d, text: `Hand ${r.mj.hand} started. ${nameOf(r, d)} is the dealer.`, rule: "deal" });
 }
 
 // ---------------- turn flow ----------------
@@ -82,6 +84,7 @@ function endHand(r: Room, reason: "wins" | "wall") {
   const m = r.mj!;
   m.phase = "ended"; m.turn = null; m.endReason = reason; m.due = null; m.claims = {}; m.claimUntil = null; m.nextReady = {};
   log(m, reason === "wall" ? "The wall is empty. Hand over." : "Three players have won. Hand over.");
+  emit(r, { type: "end", text: reason === "wall" ? `Hand ${m.hand} over: the wall is empty.` : `Hand ${m.hand} over: three players have won.`, rule: "hand-end" });
   push(r, msg({ sender: "system", text: `Hand ${m.hand} finished.` }));
 }
 function beginTurn(r: Room, pid: string | null) {
@@ -91,6 +94,7 @@ function beginTurn(r: Room, pid: string | null) {
   m.hands[pid] = sortTiles([...m.hands[pid], m.wall.shift()!]);
   m.turn = pid; m.drew = true; m.phase = "play"; m.last = null; m.claims = {}; m.claimUntil = null;
   m.due = isBot(r, pid) ? Date.now() + BOT_MS : null;
+  emit(r, { type: "draw", actor: pid, text: `${nameOf(r, pid)} drew a tile.`, rule: "draw" });
 }
 
 function recordWin(r: Room, pid: string, method: "self_draw" | "discard", tile: number, from?: string) {
@@ -116,6 +120,7 @@ function recordWin(r: Room, pid: string, method: "self_draw" | "discard", tile: 
   r.ledgerVersion = (r.ledgerVersion || 0) + 1;
   const total = transfers.reduce((s, t) => s + t.amount, 0);
   log(m, `${nameOf(r, pid)} wins ${method === "self_draw" ? "by self-draw" : `on ${nameOf(r, from!)}'s ${tileName(tile)}`} · +${total} pts`);
+  emit(r, { type: "hu", actor: pid, tile, from, text: `${nameOf(r, pid)} declared Hu ${method === "self_draw" ? "by self-draw" : `on ${nameOf(r, from!)}'s ${tileName(tile)}`}.`, rule: method === "self_draw" ? "self-draw" : "discard-win" });
 }
 
 function openClaims(r: Room, from: string, tile: number) {
@@ -165,6 +170,7 @@ function resolveClaims(r: Room) {
     m.hands[q] = m.hands[q].filter((t) => !mine.includes(t));
     m.melds[q].push({ kind: "kong", key: k, tiles: [...mine, last.tile], from: last.from });
     log(m, `${nameOf(r, q)} Kongs ${tileName(last.tile)}.`);
+    emit(r, { type: "kong", actor: q, tile: last.tile, from: last.from, text: `${nameOf(r, q)} declared Kong on ${nameOf(r, last.from)}'s ${tileName(last.tile)}.`, rule: "exposed-kong" });
     if (!m.wall.length) return endHand(r, "wall");
     m.hands[q] = sortTiles([...m.hands[q], m.wall.pop()!]); // replacement tile
     m.turn = q; m.drew = true; m.phase = "play"; m.last = null; m.due = isBot(r, q) ? Date.now() + BOT_MS : null;
@@ -176,6 +182,7 @@ function resolveClaims(r: Room) {
     m.hands[q] = m.hands[q].filter((t) => !mine.includes(t));
     m.melds[q].push({ kind: "pung", key: k, tiles: [...mine, last.tile], from: last.from });
     log(m, `${nameOf(r, q)} Pungs ${tileName(last.tile)}.`);
+    emit(r, { type: "pung", actor: q, tile: last.tile, from: last.from, text: `${nameOf(r, q)} declared Pung on ${nameOf(r, last.from)}'s ${tileName(last.tile)}.`, rule: "pung" });
     m.turn = q; m.drew = true; m.phase = "play"; m.last = null; m.due = isBot(r, q) ? Date.now() + BOT_MS : null; // discard next (no draw)
     return;
   }
@@ -192,6 +199,7 @@ function discard(r: Room, pid: string, tile: number) {
   m.hands[pid] = m.hands[pid].filter((t) => t !== tile);
   m.discards[pid].push(tile);
   m.last = { tile, from: pid }; m.drew = false; m.turn = null;
+  emit(r, { type: "discard", actor: pid, tile, text: `${nameOf(r, pid)} discarded ${tileName(tile)}.`, rule: m.dq[pid] && suitOf(tile) === m.dq[pid] ? "missing-suit" : "discard" });
   openClaims(r, pid, tile);
 }
 function selfHu(r: Room, pid: string) {
@@ -215,6 +223,7 @@ function concealedKong(r: Room, pid: string, key: string) {
   m.melds[pid].push({ kind: "ckong", key, tiles: four });
   m.hands[pid] = sortTiles([...m.hands[pid], m.wall.pop()!]);
   log(m, `${nameOf(r, pid)} declares a concealed Kong.`);
+  emit(r, { type: "kong", actor: pid, tile: four[0], text: `${nameOf(r, pid)} declared a concealed Kong of ${tileName(four[0])}.`, rule: "concealed-kong" });
 }
 
 function botStep(r: Room) {
@@ -247,6 +256,7 @@ function tryExchange(r: Room) {
   }
   m.phase = "dingque"; m.due = Date.now() + BOT_MS;
   log(m, "Tiles exchanged. Now choose your missing suit.");
+  emit(r, { type: "exchange", text: `Everyone exchanged three tiles (${m.exDir === "across" ? "across the table" : m.exDir}).`, rule: "exchange" });
 }
 function tryDingque(r: Room) {
   const m = r.mj!;
@@ -254,6 +264,7 @@ function tryDingque(r: Room) {
   m.phase = "play"; m.turn = m.dealer; m.drew = true; // dealer starts with 14 tiles: discard first
   m.due = isBot(r, m.dealer) ? Date.now() + BOT_MS : null;
   log(m, `${nameOf(r, m.dealer)} discards first.`);
+  emit(r, { type: "dingque", text: `Missing suits chosen: ${m.order.map((id) => `${nameOf(r, id)} ${SUIT_NAME[m.dq[id]]}`).join(", ")}.`, rule: "dingque" });
 }
 
 /** Apply any automatic step that is due (simulated seats, claim timeouts). One step per call keeps play readable. */
@@ -321,6 +332,7 @@ export function applyMjAction(r: Room, pid: string, a: Record<string, unknown>):
       m.melds = Object.fromEntries(m.order.map((id) => [id, []])); m.discards = Object.fromEntries(m.order.map((id) => [id, []]));
       m.winners = []; m.claims = {}; m.claimUntil = null; m.last = null;
       m.phase = "play"; m.turn = String(a.turn); m.drew = true; m.due = isBot(r, m.turn) ? Date.now() + BOT_MS : null;
+      emit(r, { type: "deal", actor: m.turn, text: `Test hands set up. ${nameOf(r, m.turn)} plays first.`, rule: "deal" });
       return true;
     }
     case "social": {
@@ -343,7 +355,7 @@ export function applyMjAction(r: Room, pid: string, a: Record<string, unknown>):
 /** What one viewer may see: their own hand and exchange; others only as counts. The wall is a count. */
 export function redactMj(m: MjState | undefined, viewer: string) {
   if (!m) return undefined;
-  const { wall, hands, exchange, received, claims, ...rest } = m;
+  const { wall, hands, exchange, received, claims, ...rest } = m; // (spectator feed lives on the room, not here)
   return {
     ...rest,
     wallCount: wall.length,

@@ -9,6 +9,7 @@ import { entryForStage } from "../mahjong/intent-matcher";
 import { applyGameAction, initGame } from "./game";
 import { applyMjAction, dealMj, mjTick, redactMj } from "./mj";
 import { displayName } from "../names";
+import { saveSnaps } from "./feed";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -22,6 +23,8 @@ export const roomKey = (c: string) => `mt:room:${c}`;
 export const presenceKey = (c: string) => `mt:room:${c}:presence`;
 export const privKey = (c: string, pid: string) => `mt:room:${c}:priv:${pid}`;
 export const cookieName = (c: string) => `mt_${c}`;
+/** Index of game rooms matched in a classroom (field = room code). */
+export const classRoomsKey = (cls: string) => `mt:class:${cls}:rooms`;
 
 const ALPHA = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const rand = (n: number) => Array.from(crypto.randomBytes(n), (b) => ALPHA[b % ALPHA.length]).join("");
@@ -55,7 +58,12 @@ export async function mutate(code: string, fn: (r: Room) => void): Promise<Room>
     const next: Room = structuredClone(cur);
     fn(next);
     next.v = cur.v + 1;
-    if (await kv.cas(roomKey(code), cur.v, JSON.stringify(next), TTL)) return next;
+    const snaps = next._snaps; // spectator snapshots never enter the room document
+    delete next._snaps;
+    if (await kv.cas(roomKey(code), cur.v, JSON.stringify(next), TTL)) {
+      if (snaps?.length) await saveSnaps(code, snaps).catch((e) => console.error("snapshot write failed", e));
+      return next;
+    }
     await new Promise((r) => setTimeout(r, 20 + Math.random() * 60));
   }
   throw new HttpError(409, "The room is busy. Please try again.");
@@ -105,7 +113,7 @@ export function addVirtualSeats(r: Room, count: number) {
 }
 
 /** Random Match: one room for 1–4 humans; empty seats become labelled AI demo seats. Written atomically (must not exist). */
-export async function createMatchedRoom(humans: { name: string; avatar?: string }[]) {
+export async function createMatchedRoom(humans: { name: string; avatar?: string }[], classroom?: string) {
   if (!humans.length || humans.length > 4) throw new HttpError(500, "Invalid match size");
   const creds = humans.map(() => ({ pid: uid(), token: crypto.randomBytes(24).toString("base64url") }));
   const taken = new Set<string>();
@@ -119,9 +127,13 @@ export async function createMatchedRoom(humans: { name: string; avatar?: string 
     const code = `MAH-${rand(4)}`;
     const room = baseRoom(code, creds[0].pid, "Sichuan Table", players.map((p) => ({ ...p })), "Matched a table of four.");
     room.matched = true;
+    if (classroom) room.classroom = classroom;
     addVirtualSeats(room, 4 - humans.length);
     autoVirtual(room);
-    if (await kv.cas(roomKey(code), -1, JSON.stringify(room), TTL)) return { room, creds };
+    if (await kv.cas(roomKey(code), -1, JSON.stringify(room), TTL)) {
+      if (classroom) await kv.hset(classRoomsKey(classroom), code, String(Date.now()), TTL);
+      return { room, creds };
+    }
   }
   throw new HttpError(500, "Could not allocate a room code");
 }
@@ -163,7 +175,8 @@ export function presenceOf(pres: Record<string, string>, pid: string): PublicPla
   return age < 8000 ? "online" : age < 45000 ? "reconnecting" : "offline";
 }
 export function publicRoom(room: Room, pres: Record<string, string>, viewer = ""): PublicRoom {
-  return { ...room, mj: redactMj(room.mj, viewer), players: room.players.map(({ tokenHash: _t, ...p }) => ({ ...p, presence: p.kind === "virtual" ? "online" : presenceOf(pres, p.id) })) };
+  const { feed: _f, feedSeq: _s, _snaps: _x, ...rest } = room; // spectator data never reaches players
+  return { ...rest, mj: redactMj(room.mj, viewer), players: room.players.map(({ tokenHash: _t, ...p }) => ({ ...p, presence: p.kind === "virtual" ? "online" : presenceOf(pres, p.id) })) };
 }
 
 // ---------- group engine ----------

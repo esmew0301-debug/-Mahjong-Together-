@@ -330,12 +330,12 @@ export function MjTable({ r, me, act, busy, error, openCoach, onEnd, overlays }:
 
         <div className="flex-1 flex flex-col lg:flex-row gap-3 lg:gap-5 pb-3">
           {/* ---------- board + hand ---------- */}
-          <section aria-label="Mahjong table" className="flex-1 min-w-0 flex flex-col gap-3">
-            <div className="relative rounded-[22px] lg:rounded-[28px] bg-[#1f5a2a] dark:bg-[#17401f] shadow-[inset_0_0_0_5px_rgba(0,0,0,0.12),0_8px_24px_rgba(0,0,0,0.10)] p-2.5 lg:p-5 lg:min-h-[420px] grid grid-cols-[76px_minmax(0,1fr)_76px] lg:grid-cols-[minmax(120px,1fr)_minmax(0,2.4fr)_minmax(120px,1fr)] grid-rows-[auto_1fr] lg:grid-rows-[auto_1fr_auto] gap-x-1.5 gap-y-2 lg:gap-2">
+          <section aria-label="Mahjong table" className="lg:flex-1 min-w-0 flex flex-col gap-3">
+            <div className="relative rounded-[22px] lg:rounded-[28px] bg-[#1f5a2a] dark:bg-[#17401f] shadow-[inset_0_0_0_5px_rgba(0,0,0,0.12),0_8px_24px_rgba(0,0,0,0.10)] p-2.5 lg:p-5 lg:min-h-[min(420px,50vh)] grid grid-cols-[76px_minmax(0,1fr)_76px] lg:grid-cols-[minmax(120px,1fr)_minmax(0,2.4fr)_minmax(120px,1fr)] grid-rows-[auto_1fr] lg:grid-rows-[auto_1fr_auto] gap-x-1.5 gap-y-2 lg:gap-2">
               <div className="col-span-3 lg:col-span-1 lg:col-start-2 row-start-1 flex justify-center px-11 lg:px-0">{seat(seatOf.top, "top")}</div>
               <div className="col-start-1 row-start-2 flex flex-col items-center justify-center gap-1.5">{seat(seatOf.left, "left")}<div className="lg:hidden">{pile(seatOf.left, true)}</div></div>
               <div className="col-start-3 row-start-2 flex flex-col items-center justify-center gap-1.5">{seat(seatOf.right, "right")}<div className="lg:hidden">{pile(seatOf.right, true)}</div></div>
-              <div className="col-start-2 row-start-2 grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto_auto] lg:grid-rows-[auto_1fr_auto] gap-1.5 lg:gap-2 items-center justify-items-center lg:min-h-[240px]">
+              <div className="col-start-2 row-start-2 grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto_auto] lg:grid-rows-[auto_1fr_auto] gap-1.5 lg:gap-2 items-center justify-items-center lg:min-h-[min(240px,26vh)]">
                 <div className="lg:col-span-3 row-start-1">{pile(seatOf.top, false)}</div>
                 <div className="hidden lg:block lg:col-start-1 row-start-2">{pile(seatOf.left, true)}</div>
                 <div className="hidden lg:block lg:col-start-3 row-start-2">{pile(seatOf.right, true)}</div>
@@ -364,13 +364,13 @@ export function MjTable({ r, me, act, busy, error, openCoach, onEnd, overlays }:
               </div>
               {m.myReceived && m.phase === "dingque" && <p className="t-sub text-muted">You received: {m.myReceived.map(tileName).join(", ")}</p>}
               {claim && actions}
-              <div className="grid grid-cols-7 gap-1.5 pt-3 sm:flex sm:flex-wrap sm:justify-center sm:gap-1.5 max-w-[440px] w-full mx-auto sm:max-w-none" aria-label="Your hand">
+              <div className="grid grid-cols-7 gap-1.5 pt-3 sm:flex sm:flex-wrap sm:justify-center sm:gap-1.5 lg:gap-1 xl:gap-1.5 max-w-[440px] w-full mx-auto sm:max-w-none" aria-label="Your hand">
                 {hand.map((t) => {
                   const isDq = !!dq && suitOf(t) === dq;
                   const selectable = (m.phase === "exchange" && !m.myExchange) || myTurn;
                   return (
-                    <div key={t} className="sm:w-[44px] lg:w-[48px]">
-                      <Tile id={t} fluid label={tileName(t)} selected={sel.includes(t) || (!!m.myExchange && m.myExchange.includes(t))}
+                    <div key={t} className="sm:w-[44px] lg:w-[38px] xl:w-[48px]">
+                      <Tile id={t} fluid label={tileName(t)} selected={sel.includes(t) || (m.phase === "exchange" && !!m.myExchange && m.myExchange.includes(t))}
                         hint={coach && !!suggestion && suggestion.tile === t} dim={myTurn && !legal.includes(t) && !isDq}
                         onClick={selectable ? () => tap(t) : undefined} />
                     </div>
