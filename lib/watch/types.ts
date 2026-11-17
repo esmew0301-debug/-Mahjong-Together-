@@ -97,6 +97,6 @@ export interface PracticeMoment { qid: string; seq: number; game: string; ref: Q
 export interface GameAttempt { id: string; startedAt: number; deadline: number; members: string[]; declined: string[]; room?: string; formedAt?: number;
   creds?: Record<string, { pid: string; token: string }> /* SERVER-ONLY: stripped before sending */ }
 /** Group-wide discussion of up to 4 real moments; everyone active confirms "I Understand" before the group moves on. */
-export interface Practice { v: number; group: string; moments: PracticeMoment[]; cur: number; ready: string[]; users: Record<string, LearnerProgress>; chat: PracticeMsg[]; games: GameAttempt[] }
+export interface Practice { v: number; group: string; moments: PracticeMoment[]; cur: number; ready: string[]; revealed?: boolean /* current moment's explanation shown to the group */; users: Record<string, LearnerProgress>; chat: PracticeMsg[]; games: GameAttempt[] }
 
 export interface GameSummary { code: string; name: string; status: string; players: { name: string; avatar?: string; kind?: string }[]; hand: number | null; teaching: boolean; featured: boolean; classroom?: string; createdAt: number }

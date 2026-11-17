@@ -222,7 +222,7 @@ export async function snapshotFor(c: string, game: string, seq: number, readCook
 }
 
 // ---------------------------------------------------------------- discussion
-const ACTS = ["ask", "reply", "same", "intro-done", "group-accept", "group-decline", "general-join", "group-leave", "prac-understand", "prac-decide", "prac-chat", "prac-emoji"];
+const ACTS = ["ask", "reply", "same", "intro-done", "group-accept", "group-decline", "general-join", "group-leave", "prac-reveal", "prac-understand", "prac-decide", "prac-chat", "prac-emoji"];
 const lastPost = new Map<string, number>(); // best-effort per-instance spam guard; the document check below is authoritative
 function liveSession(room: Room) {
   const s = sessionOf(room);
@@ -324,8 +324,14 @@ async function groupAct(c: string, s: Session, me: SpecRec, type: string, a: Rec
   const pres = await kv.hgetall(specPresKey(c));
   const { doc } = await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g, []), (pr) => {
     const u: LearnerProgress = (pr.users[me.id] ||= {});
-    if (type === "prac-understand") {
+    if (type === "prac-reveal") {
+      if (practiceDone(pr) || Number(a.moment) !== pr.cur || pr.revealed) return;
+      const missing = activeMembers(g, pres, me.id).filter((m) => !contributors(pr).has(m));
+      if (missing.length) throw new HttpError(409, "Everyone shares their thoughts first.");
+      pr.revealed = true;
+    } else if (type === "prac-understand") {
       if (practiceDone(pr) || Number(a.moment) !== pr.cur) return; // stale / repeated click
+      if (!pr.revealed) throw new HttpError(409, "Discuss and view the explanation first.");
       if (!pr.ready.includes(me.id)) pr.ready.push(me.id);
       advance(pr, g, pres, me.id);
     } else if (type === "prac-decide") {
@@ -362,7 +368,9 @@ async function myGroup(s: Session, me: SpecRec) {
   return g;
 }
 export const MAX_MOMENTS = 4;
-const newPractice = (g: Group, moments: PracticeMoment[]): Practice => ({ v: 0, group: g.id, moments, cur: 0, ready: [], users: {}, chat: [], games: [] });
+const newPractice = (g: Group, moments: PracticeMoment[]): Practice => ({ v: 0, group: g.id, moments, cur: 0, ready: [], revealed: false, users: {}, chat: [], games: [] });
+/** Who has shared at least one real text message about the CURRENT moment (emoji don't count; each person once). */
+export const contributors = (pr: Practice) => new Set(pr.chat.filter((c) => c.moment === pr.cur && c.kind === "text" && c.text.replace(/\s+/g, "").length >= 2).map((c) => c.sid));
 const practiceDone = (pr: Practice) => pr.cur >= pr.moments.length;
 const ACTIVE_MS = 20_000;
 /** Members who count for "everyone's ready": accepted, still connected (seen in the last 20 s). Never auto-approves anyone. */
@@ -371,10 +379,10 @@ function activeMembers(g: Group, pres: Record<string, string>, also?: string) {
   return g.members.filter((m) => g.status[m] === "accepted" && (m === also || now - Number(pres[m] || 0) < ACTIVE_MS));
 }
 function advance(pr: Practice, g: Group, pres: Record<string, string>, also?: string) {
-  if (practiceDone(pr) || !pr.ready.length) return false;
+  if (practiceDone(pr) || !pr.revealed || !pr.ready.length) return false;
   const act = activeMembers(g, pres, also);
   if (!act.length || !act.every((m) => pr.ready.includes(m))) return false;
-  pr.cur += 1; pr.ready = [];
+  pr.cur += 1; pr.ready = []; pr.revealed = false; // each moment starts with a fresh discussion
   return true;
 }
 /** A member disconnected after the others confirmed: move the group on (checked on every poll). */

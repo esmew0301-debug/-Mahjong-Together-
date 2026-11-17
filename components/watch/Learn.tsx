@@ -8,7 +8,7 @@ import type { Discussion, Group, Groups, Question, SpecPlayer, Topic, Viewer } f
 import { TOPIC_LABEL, TOPIC_SHORT } from "@/lib/watch/topics";
 import { interestProfiles, joinWords } from "@/lib/watch/groups";
 import { TOPIC_EXPLAIN, groupName } from "@/lib/watch/basics";
-import { explainMoment, momentTiles } from "@/lib/watch/moments";
+import { explainMoment, meaningfulQuestion, momentTiles } from "@/lib/watch/moments";
 import { tileName } from "@/lib/mj/rules";
 import { T } from "@/lib/watch/scenarios";
 import { Btn, cx } from "@/components/ui";
@@ -110,6 +110,10 @@ export function Summary({ disc, groups, people, me, act, openPractice, backToTab
                 <ul className="flex flex-wrap gap-2">
                   {ids.map((id) => <li key={id} className="inline-flex items-center gap-1.5 rounded-full bg-card border border-line pl-1 pr-3 py-1 t-sub"><VAvatar v={people[id]} size={26} />{people[id]?.name || "Viewer"}{id === me ? " (you)" : ""}</li>)}
                 </ul>
+                <div className="rounded-[12px] bg-sage px-3 py-2.5 flex items-center gap-3 mt-1" data-topic-explain={t}>
+                  <div className="flex-1 min-w-0"><p className="t-section">{TOPIC_EXPLAIN[t].title}</p><p className="t-sub mt-0.5">{TOPIC_EXPLAIN[t].text}</p></div>
+                  <TopicTiles t={t} />
+                </div>
               </div>
             )) : <p className="t-body text-muted">No shared questions came up at this table yet.</p>}
           </section>
@@ -276,7 +280,7 @@ export function PracticeRoom({ group, practice, people, me, act, onBack, cls, ga
   }, [attempt]);
 
   if (!practice) return <div className="h-full flex items-center justify-center t-body text-muted">Opening the discussion group…</div>;
-  const goHome = async () => { if (await run({ type: "prac-decide", choice: "no" })) router.push("/"); };
+  const goHome = async () => { await run({ type: "prac-decide", choice: "no" }); router.push("/"); }; // leaving always works (no seat is ever held without a yes)
   const names = Object.fromEntries(players.map((p) => [p.id, p.name]));
   const done = practice.cur >= practice.moments.length;
   const shell = (main: React.ReactNode) => (
@@ -349,6 +353,11 @@ export function PracticeRoom({ group, practice, people, me, act, onBack, cls, ga
   const active = (practice.active || group.members.filter((x) => group.status[x] === "accepted"));
   const readyN = active.filter((x) => practice.ready.includes(x)).length;
   const iReady = practice.ready.includes(me);
+  const revealed = !!practice.revealed;
+  // who has shared a real text message about THIS moment (same rule as the server; emoji don't count)
+  const said = new Set(practice.chat.filter((c) => c.moment === practice.cur && c.kind === "text" && c.text.replace(/\s+/g, "").length >= 2).map((c) => c.sid));
+  const saidN = active.filter((x) => said.has(x)).length;
+  const allSaid = active.length > 0 && saidN === active.length;
   const tablePlayers: SpecPlayer[] = m.snap.order.map((pid, k) => players.find((p) => p.id === pid) || { id: pid, name: pid === m.ref.actor ? m.ref.actorName || "Player" : "Player", seat: k });
   return (
     <div className="h-full min-h-0 max-w-[1440px] mx-auto w-full px-4 py-4 grid grid-cols-[minmax(0,1.75fr)_minmax(340px,1fr)] gap-4" data-practice-moment={practice.cur}>
@@ -359,16 +368,16 @@ export function PracticeRoom({ group, practice, people, me, act, onBack, cls, ga
           <span className="flex gap-1.5" aria-hidden>{practice.moments.map((_, k) => <span key={k} className={cx("h-2 w-8 rounded-full", k < practice.cur ? "bg-green" : k === practice.cur ? "bg-green/40" : "bg-line")} />)}</span>
         </div>
         <div>
-          <p className="text-[20px] leading-[28px] font-semibold" data-moment-question>{m.question}</p>
-          <p className="t-sub text-muted mt-0.5">{m.ref.text.replace(/\.$/, "")} · Move {m.seq}{ex.label ? ` · ${ex.label}` : ""}{tiles.length ? " · circled in red" : ""}</p>
+          <p className="text-[20px] leading-[28px] font-semibold" data-moment-question>{ex.title}</p>
+          <p className="t-sub text-muted mt-0.5">{meaningfulQuestion(m.question) ? `A viewer asked: “${m.question}” · ` : ""}Move {m.seq}{ex.label ? ` · ${ex.label}` : ""}{tiles.length ? " · circled in red" : ""}</p>
         </div>
         <div className="relative flex-1 min-h-[360px]" data-moment-table>
           <SpecTable snap={m.snap} players={tablePlayers} persp={persp} highlight={tiles.length ? { tiles, actor: m.ref.actor } : null} paused red scores={{}} statusText={`Recorded move ${m.seq}`} unit="clamp(16px, min(1.6vw, 2.55vh), 30px)" />
           {advanced && <div className="absolute inset-x-0 top-4 flex justify-center z-30"><span className="rounded-full bg-green-strong text-white px-4 py-2 t-section shadow-sheet mt-pop">Everyone&apos;s Ready — Next Moment</span></div>}
         </div>
         <div className="flex items-center gap-4 flex-wrap">
-          <Btn className="min-w-[200px]" variant={iReady ? "ok" : "primary"} disabled={busy || iReady} onClick={() => run({ type: "prac-understand", moment: practice.cur })}><Check size={18} /> {iReady ? "You Understand" : "I Understand"}</Btn>
-          <p className="t-body" aria-live="polite" data-ready-count>{readyN} of {active.length} ready to continue</p>
+          <Btn className="min-w-[200px]" variant={iReady ? "ok" : "primary"} disabled={busy || iReady || !revealed} onClick={() => run({ type: "prac-understand", moment: practice.cur })}><Check size={18} /> {iReady ? "You Understand" : "I Understand"}</Btn>
+          <p className="t-body" aria-live="polite" data-ready-count>{revealed ? `${readyN} of ${active.length} ready to continue` : "Discuss first, then view the explanation"}</p>
           <span className="flex -space-x-1.5 ml-auto">{active.map((x) => (
             <span key={x} className="relative" title={`${people[x]?.name || "Viewer"}${practice.ready.includes(x) ? " · understands" : ""}`}>
               <VAvatar v={people[x]} size={32} ring />
@@ -379,12 +388,24 @@ export function PracticeRoom({ group, practice, people, me, act, onBack, cls, ga
         {err && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{err}</p>}
       </section>
       <div className="min-h-0 flex flex-col gap-4">
-        <section className="rounded-[22px] border border-line bg-card p-5 flex flex-col gap-2 max-h-[46%] overflow-y-auto" aria-label="What Happened Here?" data-explain>
+        <section className="rounded-[22px] border border-line bg-card p-5 flex flex-col gap-2 max-h-[58%] overflow-y-auto" aria-label="What Happened Here?" data-explain>
           <h2 className="t-page">What Happened Here?</h2>
           <p className="t-body">{ex.happened}</p>
-          <h3 className="t-section mt-1">Why This Move?</h3>
-          <p className="t-body">{ex.why}</p>
-          <p className="t-sub rounded-[12px] bg-sage px-3 py-2 mt-1"><b>Discuss:</b> {ex.prompt}</p>
+          {!revealed ? (
+            <div className="rounded-[12px] bg-sage px-3 py-2.5 mt-1 flex flex-col gap-2" data-discuss>
+              <p className="t-section">Discuss Together</p>
+              <p className="t-body">{ex.prompt}</p>
+              <p className="t-sub text-muted" aria-live="polite" data-said-count>{saidN} of {active.length} members have shared their thoughts</p>
+              <Btn className="self-start min-h-11" disabled={busy || !allSaid} onClick={() => run({ type: "prac-reveal", moment: practice.cur })}>View Explanation</Btn>
+              {!allSaid && <p className="t-sub text-muted -mt-1">Unlocks when everyone has posted one message in Group Discussion.</p>}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 mt-1 mt-pop" data-revealed>
+              <h3 className="t-section">Why This Move?</h3>
+              <p className="t-body">{ex.why}</p>
+              <p className="t-sub rounded-[12px] bg-sage px-3 py-2"><b>Key takeaway:</b> {ex.takeaway}</p>
+            </div>
+          )}
         </section>
         <GroupChat group={group} practice={practice} people={people} me={me} act={act} compact />
       </div>
