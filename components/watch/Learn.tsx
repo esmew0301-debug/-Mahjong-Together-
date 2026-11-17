@@ -21,9 +21,15 @@ export function myGroupOf(groups: Groups | null, me: string): Group | null {
   return groups.groups.find((g) => g.id === acc) || groups.groups.find((g) => g.kind === "topic" && g.members.includes(me) && g.status[me] === "invited") || null;
 }
 
-/** Spectator summary: real shared-question data only (no fabricated classmates or metrics). */
-export function Summary({ disc, groups, people, me, act, openPractice, keepWatching, gameOver }: {
-  disc: Discussion; groups: Groups | null; people: Record<string, Viewer>; me: string; act: Act; openPractice: () => void; keepWatching?: () => void; gameOver: boolean;
+/** Plain-language description of what a topic is about (no analytics, no internal tags). */
+const ABOUT: Record<Topic, string> = {
+  tile: "what the tiles mean", discard: "why players discard certain tiles", dingque: "the missing suit (Ding Que)", exchange: "exchanging three tiles",
+  pung: "when you can call Pung", kong: "how Kong works", hu: "what makes a winning hand", scoring: "how points are counted", turn: "whose turn it is", general: "the basic rules",
+};
+
+/** Spectator summary — appears automatically when the watched hand / game ends. Real people and simple words only. */
+export function Summary({ disc, groups, people, me, act, openPractice, backToTable, gameOver, liveAgain }: {
+  disc: Discussion; groups: Groups | null; people: Record<string, Viewer>; me: string; act: Act; openPractice: () => void; backToTable: () => void; gameOver: boolean; liveAgain: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -31,53 +37,41 @@ export function Summary({ disc, groups, people, me, act, openPractice, keepWatch
     setBusy(true); setErr(null);
     try { await act(a); then?.(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
-  const topics = useMemo(() => {
+  // topics shared by at least two people, with those people (from public questions and +1s only)
+  const shared = useMemo(() => {
     const by: Partial<Record<Topic, Set<string>>> = {};
     for (const q of disc.questions) for (const s of q.same) (by[q.topic] ||= new Set()).add(s);
-    return (Object.entries(by) as [Topic, Set<string>][]).map(([t, s]) => ({ t, n: s.size })).sort((a, b) => b.n - a.n);
+    return (Object.entries(by) as [Topic, Set<string>][]).filter(([, s]) => s.size >= 2).map(([t, s]) => ({ t, ids: [...s] })).sort((a, b) => b.ids.length - a.ids.length).slice(0, 4);
   }, [disc]);
-  const top = [...disc.questions].sort((a, b) => b.same.length - a.same.length || b.ts - a.ts).slice(0, 4);
   const mine = interestProfiles(disc)[me] || [];
   const g = myGroupOf(groups, me);
   const accepted = !!g && g.status[me] === "accepted";
   const declined = groups?.groups.some((x) => x.kind === "topic" && x.members.includes(me) && x.status[me] === "declined");
-  const max = Math.max(1, ...topics.map((x) => x.n));
 
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-[1120px] mx-auto px-6 py-8 flex flex-col gap-6">
-        <div className="text-center mt-pop">
-          <h1 className="text-[30px] leading-[38px] font-semibold text-green-text">You Learned Together!</h1>
-          <p className="t-body text-muted mt-1">See what your classmates were curious about.</p>
-          {!gameOver && keepWatching && <button onClick={keepWatching} className="t-sub text-green-text font-medium min-h-11 mt-1 hover:underline">Keep watching the table (questions are closed)</button>}
+        <div className="flex items-end gap-4 mt-pop">
+          <div className="flex-1">
+            <h1 className="text-[32px] leading-[40px] font-semibold text-green-text">You Learned Together!</h1>
+            <p className="t-body text-muted mt-1">See what your classmates were curious about.</p>
+          </div>
+          {!gameOver && <Btn variant="secondary" className="bg-card" onClick={backToTable}>{liveAgain ? "Watch the Next Hand" : "Back to the Table"}</Btn>}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-5 items-start">
-          <section className="rounded-[22px] border border-line bg-card p-5 flex flex-col gap-4" aria-label="Most Asked About">
-            <h2 className="t-page">Most Asked About</h2>
-            {topics.length ? (
-              <ul className="flex flex-col gap-2.5">
-                {topics.slice(0, 6).map(({ t, n }) => (
-                  <li key={t} className="flex flex-col gap-1">
-                    <div className="flex items-center"><span className="t-body font-medium flex-1">{TOPIC_LABEL[t]}</span><span className="t-sub text-muted tabular-nums">{n} {n === 1 ? "viewer" : "viewers"}</span></div>
-                    <div className="h-2.5 rounded-full bg-bubble overflow-hidden"><div className="h-full rounded-full bg-green-strong" style={{ width: `${(n / max) * 100}%` }} /></div>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="t-body text-muted">No public questions were asked in this session.</p>}
-            {top.length > 0 && <>
-              <h3 className="t-section mt-2">Most Shared Questions</h3>
-              <ul className="flex flex-col gap-2">
-                {top.map((q) => (
-                  <li key={q.id} className="rounded-[14px] bg-page border border-line px-3 py-2">
-                    <p className="t-body">“{q.text}”</p>
-                    <p className="t-sub text-muted">{q.ref ? q.ref.text.replace(/\.$/, "") : "General question"} · {q.same.length} {q.same.length === 1 ? "person" : "people"} · {q.replies.length} {q.replies.length === 1 ? "reply" : "replies"}</p>
-                  </li>
-                ))}
-              </ul>
-            </>}
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-6 items-start">
+          <section className="rounded-[22px] border border-line bg-card p-6 flex flex-col gap-4" aria-label="People who asked similar questions" data-similar-people>
+            <h2 className="t-page">People who asked similar questions</h2>
+            {shared.length ? shared.map(({ t, ids }) => (
+              <div key={t} className="rounded-[16px] border border-line bg-page p-4 flex flex-col gap-2">
+                <p className="t-body">Several of you wondered about <b>{ABOUT[t]}</b>.</p>
+                <ul className="flex flex-wrap gap-2">
+                  {ids.map((id) => <li key={id} className="inline-flex items-center gap-1.5 rounded-full bg-card border border-line pl-1 pr-3 py-1 t-sub"><VAvatar v={people[id]} size={26} />{people[id]?.name || "Viewer"}{id === me ? " (you)" : ""}</li>)}
+                </ul>
+              </div>
+            )) : <p className="t-body text-muted">No shared questions came up at this table yet.</p>}
           </section>
 
-          <section className="rounded-[22px] border border-line bg-card p-5 flex flex-col gap-4 mt-pop" aria-label="Your learning group" data-group-card>
+          <section className="rounded-[22px] border border-line bg-card p-6 flex flex-col gap-4 mt-pop" aria-label="Your learning group" data-group-card>
             {g && g.kind === "topic" ? (
               <>
                 <div className="flex items-center gap-2"><Users size={22} className="text-green-text" /><h2 className="t-page">Meet Your Learning Group</h2></div>
@@ -103,23 +97,16 @@ export function Summary({ disc, groups, people, me, act, openPractice, keepWatch
               </>
             ) : g && g.kind === "general" ? (
               <>
-                <div className="flex items-center gap-2"><Users size={22} className="text-green-text" /><h2 className="t-page">General Beginner Group</h2></div>
-                <p className="t-body">{g.members.length === 1 ? "You're the first one here. Others can join you." : `${g.members.length} learners have joined.`}</p>
+                <div className="flex items-center gap-2"><Users size={22} className="text-green-text" /><h2 className="t-page">Beginner Practice Group</h2></div>
+                <p className="t-body">{g.members.length === 1 ? "You're the first one here. Others can join you." : "Other beginners have joined you."}</p>
                 <div className="flex -space-x-2">{g.members.map((id) => <span key={id} title={people[id]?.name}><VAvatar v={people[id]} size={36} ring /></span>)}</div>
                 <Btn onClick={openPractice}><Sparkles size={18} /> Open Practice Room</Btn>
               </>
             ) : (
               <>
                 <div className="flex items-center gap-2"><Users size={22} className="text-green-text" /><h2 className="t-page">Find Learning Partners</h2></div>
-                {!groups?.computedAt ? (
-                  <p className="t-body text-muted">{mine.length ? "Your learning group will appear here when your instructor shares the recommendations." : "Watch a few moves and join the discussion to discover learning partners."}</p>
-                ) : declined ? (
-                  <p className="t-body text-muted">No problem. You can still join a general beginner group.</p>
-                ) : (
-                  <p className="t-body text-muted">{mine.length ? "We haven't found a full learning group yet. You can join a general beginner group instead." : "Watch a few moves and join the discussion to discover learning partners."}</p>
-                )}
-                {mine.length > 0 && <p className="t-sub">Your topics: {mine.map((t) => TOPIC_LABEL[t]).join(", ")}</p>}
-                <Btn variant="secondary" className="bg-card" disabled={busy} onClick={() => run({ type: "general-join" }, openPractice)}>Join a General Beginner Group</Btn>
+                <p className="t-body text-muted">{declined ? "No problem. You can still practice with other beginners." : mine.length ? "We haven't found a full learning group yet. You can join a general beginner group instead." : "Watch a few moves and join the discussion to discover learning partners."}</p>
+                <Btn variant="secondary" className="bg-card self-start" disabled={busy} onClick={() => run({ type: "general-join" }, openPractice)}>Join a Beginner Group</Btn>
               </>
             )}
             {err && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{err}</p>}

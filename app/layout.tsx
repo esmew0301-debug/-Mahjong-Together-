@@ -26,6 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="font-sans">
         <div className="app-col">{children}</div>
+        <div className="desktop-only-msg min-h-[100dvh] flex-col items-center justify-center text-center gap-3 px-8" role="note">
+          <p className="t-app text-green-text">Mahjong Together</p>
+          <p className="t-body text-muted max-w-[340px]">Mahjong Together is designed for laptops and desktops. Please open this experience on a computer.</p>
+        </div>
       </body>
     </html>
   );

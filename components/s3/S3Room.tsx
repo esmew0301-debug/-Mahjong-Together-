@@ -70,13 +70,14 @@ export function S3Room({ data, actions, openCoach }: { data: NonNullable<Actions
     return () => window.clearTimeout(t);
   }, [held, reduce]);
   const r = held || live;
-  if (r.status === "lobby") return <Lobby r={r} me={me} actions={actions} />;
+  if (r.status === "lobby") return <Lobby r={r} me={me} actions={actions} openCoach={openCoach} />;
   if (r.status === "setup") return <Prep r={r} me={me} actions={actions} />;
   return <GameHome r={r} me={me} actions={actions} openCoach={openCoach} conn={actions.conn} />;
 }
 
 // ----------------------------------------------------------------------------------------- lobby
-function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions }) {
+function Lobby({ r, me, actions, openCoach }: { r: PublicRoom; me: string; actions: Actions; openCoach: () => void }) {
+  const [learn, setLearn] = useState<string | null>(null);
   const router = useRouter();
   const { act, busy, error } = useAct(actions);
   const [qrOpen, setQrOpen] = useState(false);
@@ -103,37 +104,66 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
   const anyAI = r.players.some(isAI);
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <Header title="Mahjong Together" onBack={() => router.push("/")} />
-      <main className="flex-1 px-4 pt-6 pb-5 flex flex-col gap-7">
-        <div>
-          <h1 className="t-app text-green-text">Your Table</h1>
-          <p className="t-sub text-muted mt-0.5">Room {r.code} · Sichuan Mahjong</p>
-        </div>
-        <TeachingNotice r={r} />
-        <FourPlayerStatus players={r.players} me={me} showOpenSeats countLabel="Ready" doneLabel="Ready"
-          state={(p) => (ready[p.id] ? "done" : "waiting")} />
-        <p className="t-sub text-muted text-center -mt-3" aria-live="polite">{all ? "Everyone's ready." : n < 4 ? `${n} of 4 seats filled · ${4 - n} more to join` : mine ? "Waiting for the group…" : "Tap I'm Ready when you're at the table."}</p>
-        {anyAI && <p className="t-meta text-muted text-center">This demo includes simulated participants.</p>}
-        {!r.matched && (
-          <div className="grid grid-cols-2 gap-2">
-            <Btn variant="secondary" className="px-2 text-[14px] bg-card" onClick={share}><Share2 size={16} strokeWidth={1.75} /> {copied ? "Copied" : "Share Room Code"}</Btn>
-            <Btn variant="secondary" className="px-2 text-[14px] bg-card" onClick={() => setQrOpen(true)}><QrCode size={16} strokeWidth={1.75} /> Show QR Code</Btn>
+      <Header title="" onBack={() => router.push("/")} />
+      <main className="flex-1 w-full max-w-[1200px] mx-auto px-6 py-8 grid grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)] gap-6 items-start">
+        <section className="rounded-[24px] border border-line bg-card shadow-card p-8 flex flex-col gap-7">
+          <div className="flex items-end gap-4">
+            <div className="flex-1">
+              <h1 className="text-[30px] leading-[38px] font-semibold text-green-text">Your Table</h1>
+              <p className="t-body text-muted mt-1">Room {r.code} · Sichuan Mahjong</p>
+            </div>
+            {!r.matched && (
+              <div className="flex gap-2">
+                <Btn variant="secondary" className="px-3 text-[14px] bg-card" onClick={share}><Share2 size={16} strokeWidth={1.75} /> {copied ? "Copied" : "Share Room Code"}</Btn>
+                <Btn variant="secondary" className="px-3 text-[14px] bg-card" onClick={() => setQrOpen(true)}><QrCode size={16} strokeWidth={1.75} /> Show QR Code</Btn>
+              </div>
+            )}
           </div>
-        )}
+          <TeachingNotice r={r} />
+          <FourPlayerStatus players={r.players} me={me} showOpenSeats countLabel="Ready" doneLabel="Ready"
+            state={(p) => (ready[p.id] ? "done" : "waiting")} />
+          <div className="flex items-center gap-4 border-t border-line pt-6">
+            <div className="flex-1" aria-live="polite">
+              <p className="t-body">{all ? "Everyone's ready. Dealing…" : n < 4 ? `${n} of 4 seats filled · ${4 - n} more to join` : mine ? "Waiting for the others to start…" : "Press Start Playing when you're ready."}</p>
+              {anyAI && <p className="t-sub text-muted">This demo includes simulated participants.</p>}
+              {error && <p className={ERR} role="alert">{error}</p>}
+            </div>
+            <Btn className="min-w-[220px]" variant={mine ? "ok" : "primary"} disabled={busy || mine} onClick={() => act({ type: "lobby-ready" })}>
+              {mine ? <><Check size={16} /> Ready</> : "Start Playing"}
+            </Btn>
+          </div>
+        </section>
+        <aside className="flex flex-col gap-4">
+          <section className="rounded-[24px] border border-line bg-card p-6 flex flex-col gap-3" aria-label="Learn the Basics">
+            <h2 className="t-page">Learn the Basics</h2>
+            <p className="t-sub text-muted">Optional. Four short visual lessons with a quick quiz. Only you see your answers.</p>
+            <ul className="flex flex-col gap-2">
+              {LEARN_STEPS.map((id, k) => (
+                <li key={id}><button onClick={() => setLearn(id)} className="w-full text-left min-h-12 px-3 rounded-[14px] border border-line bg-page hover:bg-hover flex items-center gap-3">
+                  <span className="h-7 w-7 rounded-full bg-green-soft text-green-text t-sub font-semibold flex items-center justify-center shrink-0">{k + 1}</span>
+                  <span className="t-body font-medium flex-1">{STEP_TEXT[id].title}</span><span className="t-sub text-green-text">Open</span>
+                </button></li>
+              ))}
+            </ul>
+          </section>
+          <section className="rounded-[24px] border border-line bg-card p-6 flex flex-col gap-2" aria-label="What happens next">
+            <h2 className="t-page">What Happens Next</h2>
+            <ol className="t-body flex flex-col gap-1 list-decimal pl-5">
+              <li>Everyone presses Start Playing.</li>
+              <li>The tiles are dealt; you exchange three tiles of one suit.</li>
+              <li>Choose your missing suit, then draw and discard in turn.</li>
+            </ol>
+            <button onClick={openCoach} className="self-start t-sub font-medium text-green-text min-h-11 hover:underline">Questions? Open your Private Coach.</button>
+          </section>
+        </aside>
       </main>
-      <div className="sticky bottom-0 bg-page px-4 pt-3 pb-safe border-t border-line flex flex-col gap-2">
-        {error && <p className={ERR + " text-center"} role="alert">{error}</p>}
-        <Btn className="w-full mb-3" variant={mine ? "ok" : "primary"} disabled={busy || mine} onClick={() => act({ type: "lobby-ready" })}>
-          {mine ? <><Check size={16} /> I'm Ready</> : "I'm Ready"}
-        </Btn>
-      </div>
+      {learn && <LearnModules start={learn} dir={r.decisions.exchangeDir} onClose={() => setLearn(null)} />}
       <Sheet open={qrOpen} onClose={() => setQrOpen(false)} title="Show QR Code">
         <div className="flex flex-col items-center gap-3 pb-2">
           <div className="h-[232px] w-[232px] rounded-xl border border-line p-2 bg-white flex items-center justify-center">
             {qr ? <img src={qr} alt={`QR code to join room ${r.code}`} width={212} height={212} /> : <span className="t-meta text-muted">Generating…</span>}
           </div>
           <p className="t-section tracking-wide">{r.code}</p>
-          {/localhost|127\.0\.0\.1/.test(url) && <p className="t-meta text-muted text-center">Other phones can't open localhost. Open the site from this computer's network address to share the QR code.</p>}
         </div>
       </Sheet>
     </div>
@@ -169,6 +199,62 @@ const STEP_TEXT: Record<string, { title: string; line: string }> = {
   "sc-exchange": { title: "Exchange 3 Tiles", line: "Choose three tiles from the same suit." },
   "sc-dingque": { title: "Choose Your Missing Suit", line: "Clear one suit before you can win." },
 };
+
+const LEARN_STEPS = ["sc-tiles", "sc-wall", "sc-exchange", "sc-dingque"];
+/** The large illustration of one learning step (same artwork as the original modules). */
+function StepVisual({ stepId, dir }: { stepId: string; dir?: string }) {
+  return (
+    <div className="flex flex-col gap-2 w-full">
+      {stepId === "sc-tiles" && <><ArtVisual id="step-1-prepare-tiles" /><div className="grid grid-cols-3 text-center t-sub text-muted -mt-1"><span>Characters</span><span>Bamboo</span><span>Dots</span></div></>}
+      {stepId === "sc-wall" && <><ArtVisual id="step-2-build-wall" /><p className="t-sub text-muted text-center -mt-1">Stacks of 2 · walls of 14, 13, 14, 13 stacks · 108 tiles</p></>}
+      {stepId === "sc-exchange" && <><ArtVisual id="step-3-exchange-tiles" dir={dir} />{dir && <p className="t-sub text-muted text-center -mt-1">Pass all three to {DIR_TEXT[dir]?.who}.</p>}</>}
+      {stepId === "sc-dingque" && <><ArtVisual id="step-4-ding-que" /><div className="grid grid-cols-3 text-center t-sub text-muted -mt-1"><span>Characters</span><span>Bamboo<br /><span className="text-green-text">example</span></span><span>Dots</span></div></>}
+    </div>
+  );
+}
+
+/** Optional beginner learning path (per player, nothing is sent to the room; never gates the game). Desktop two-column. */
+function LearnModules({ start, dir, onClose }: { start: string; dir?: string; onClose: () => void }) {
+  const [i, setI] = useState(Math.max(0, LEARN_STEPS.indexOf(start)));
+  const [help, setHelp] = useState(false);
+  const [quiz, setQuiz] = useState(false);
+  const stepId = LEARN_STEPS[i];
+  const text = STEP_TEXT[stepId];
+  const next = () => (i < 3 ? setI(i + 1) : onClose());
+  if (help) return <div className="fixed inset-0 z-40 bg-page overflow-y-auto"><HelpView stepId={stepId} dir={dir} onBack={() => setHelp(false)} /></div>;
+  return (
+    <div className="fixed inset-0 z-40 bg-page overflow-y-auto flex flex-col" role="dialog" aria-modal aria-label={text.title} data-learn>
+      <Header title="Learn the Basics" titleClassName="text-green-text" onBack={onClose} backLabel="Back to Table" />
+      <main className="flex-1 w-full max-w-[1200px] min-[1600px]:max-w-[1480px] mx-auto px-6 py-8 grid grid-cols-[minmax(0,1.25fr)_minmax(320px,1fr)] gap-10 items-center">
+        <div className="rounded-[24px] border border-green bg-card p-6 flex items-center justify-center min-h-[360px] min-[1600px]:min-h-[520px]" data-learn-visual>
+          <div className="w-full max-w-[560px] min-[1600px]:max-w-[760px]"><StepVisual stepId={stepId} dir={dir} /></div>
+        </div>
+        <div className="flex flex-col gap-5">
+          <div className="flex items-center gap-3">
+            <span className="t-sub text-muted font-medium">Lesson {i + 1} of 4</span>
+            <span className="flex-1 flex gap-1.5 max-w-[160px]" aria-hidden>{[0, 1, 2, 3].map((k) => <span key={k} className={cx("h-1.5 flex-1 rounded-full", k <= i ? "bg-green" : "bg-line")} />)}</span>
+          </div>
+          <div>
+            <h1 className="text-[32px] leading-[40px] font-semibold text-green-text">{text.title}</h1>
+            <p className="text-[18px] leading-[28px] text-ink/80 mt-2">{text.line}</p>
+            {stepId === "sc-exchange" && <span className="inline-block mt-3 t-sub font-medium px-3 py-1 rounded-full border border-green text-green-text bg-green-soft">Same suit only</span>}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Btn className="min-w-[180px]" onClick={next}><Check size={18} strokeWidth={2.5} /> I Understand</Btn>
+            <Btn variant="secondary" className="bg-card" onClick={() => setQuiz(true)}>Test My Knowledge</Btn>
+            <Btn variant="ghost" onClick={() => setHelp(true)}><CircleHelp size={18} /> Need Help</Btn>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-4 border-t border-line">
+            {LEARN_STEPS.map((id, k) => (
+              <button key={id} onClick={() => setI(k)} aria-current={k === i} className={cx("t-sub min-h-11 px-3 rounded-[12px] text-left", k === i ? "bg-green-strong text-white" : "bg-bubble hover:bg-hover")}>{k + 1}. {STEP_TEXT[id].title}</button>
+            ))}
+          </div>
+        </div>
+      </main>
+      {quiz && <Quiz stepId={stepId} onClose={() => setQuiz(false)} onDone={() => { setQuiz(false); next(); }} />}
+    </div>
+  );
+}
 
 function Prep({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions }) {
   const router = useRouter();
@@ -271,7 +357,7 @@ function Sec({ h, t, children }: { h: string; t: string; children?: React.ReactN
 }
 /** Illustration area inside a help card: pale sage, so ivory tile faces stay clearly visible. */
 function Frame({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-[14px] bg-sage p-3 flex flex-col gap-2 w-full max-w-[400px] self-center mt-1">{children}</div>;
+  return <div className="rounded-[14px] bg-sage p-3 flex flex-col gap-2 w-full max-w-[520px] self-center mt-1">{children}</div>;
 }
 function Opt({ id, label, sub, value, set }: { id: string; label: string; sub?: string; value: string; set: (v: string) => void }) {
   return (
@@ -289,8 +375,8 @@ function HelpView({ stepId, dir, onBack }: { stepId: string; dir?: string; onBac
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Header title={title} titleClassName="text-green-text" onBack={onBack} backLabel="Back" />
-      <main className="flex-1 px-4 pt-5 pb-4 flex flex-col gap-4">
-        <h1 className="t-app text-green-text">{title}</h1>
+      <main className="flex-1 w-full max-w-[1200px] mx-auto px-6 py-8 grid grid-cols-2 gap-5 items-start">
+        <div className="col-span-2 flex items-center gap-4"><h1 className="text-[30px] leading-[38px] font-semibold text-green-text flex-1">{title}</h1><Btn className="min-w-[180px]" onClick={onBack}>Back to Step</Btn></div>
         {stepId === "sc-tiles" && <>
           <Sec h="How to" t="108 tiles. Three suits. Four copies of every numbered tile.">
             <Frame><ArtVisual id="step-1-help-27-types" /><p className="t-meta text-muted text-center -mt-1">Characters · Bamboo · Dots, 1–9, ×4 each = 108</p></Frame>
@@ -331,9 +417,6 @@ function HelpView({ stepId, dir, onBack }: { stepId: string; dir?: string; onBac
           <Sec h="Why?" t="Ding Que is a key Sichuan Mahjong rule that shapes how you play your hand." />
         </>}
       </main>
-      <div className="sticky bottom-0 bg-page px-4 pt-3 pb-safe border-t border-line">
-        <Btn className="w-full mb-3" onClick={onBack}>Back to Step</Btn>
-      </div>
     </div>
   );
 }
@@ -425,14 +508,14 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
         right={<IconBtn label="Private Assistant" onClick={openCoach}><MessageCircleQuestion size={20} strokeWidth={1.75} /></IconBtn>}>
         {conn === "retrying" && <div className="px-4 py-1.5 t-meta text-muted border-t border-line">Reconnecting…</div>}
       </Header>
-      <main className="flex-1 px-4 py-6 flex flex-col gap-6">
+      <main className="flex-1 w-full max-w-[1000px] mx-auto px-6 py-10 flex flex-col gap-6">
         {playing && pendingWins.length === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 min-h-[38dvh]">
-            <h1 className="text-[26px] leading-[34px] font-semibold text-green-text">You&apos;re Ready to Play!</h1>
+          <div className="flex flex-col items-center justify-center text-center gap-2 rounded-[24px] border border-line bg-card p-10">
+            <h1 className="text-[30px] leading-[38px] font-semibold text-green-text">You&apos;re Ready to Play!</h1>
             <p className="t-body text-muted">Let&apos;s try a game together.</p>
             <div className="w-full max-w-[360px] mt-3 text-left"><TeachingNotice r={r} /></div>
-            <div className="w-full max-w-[320px] mt-4 flex flex-col gap-2">
-              <Btn disabled={busy || startReady} onClick={() => act({ type: "mj-start" })}>{startReady ? "Waiting for everyone…" : "Start Playing"}</Btn>
+            <div className="w-full max-w-[720px] mt-4 flex flex-col items-center gap-5">
+              <Btn className="min-w-[240px]" disabled={busy || startReady} onClick={() => act({ type: "mj-start" })}>{startReady ? "Waiting for everyone…" : "Start Playing"}</Btn>
               <FourPlayerStatus players={r.players} me={me} doneLabel="Ready" state={(p) => (r.playReady?.[p.id] ? "done" : "waiting")} />
             </div>
             <button onClick={openCoach} className="t-sub text-muted mt-2 min-h-11 underline-offset-4 hover:underline">Need help? Open your Private Assistant.</button>
@@ -465,10 +548,8 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
         {error && <p className={ERR} role="alert">{error}</p>}
       </main>
       {playing && (
-        <div className="sticky bottom-0 bg-page px-4 pt-3 pb-safe border-t border-line">
-          <div className="grid grid-cols-1 gap-2 mb-3">
-            <Btn variant="secondary" className="bg-card" disabled={busy || !!r.endProposal} onClick={() => setEndAsk(true)}>End Game</Btn>
-          </div>
+        <div className="w-full max-w-[1000px] mx-auto px-6 pb-8 flex justify-end">
+          <Btn variant="secondary" className="bg-card min-w-[160px]" disabled={busy || !!r.endProposal} onClick={() => setEndAsk(true)}>End Game</Btn>
         </div>
       )}
 
@@ -502,11 +583,11 @@ function FinalReview({ r, me, act, busy }: { r: PublicRoom; me: string; act: Act
       </ul>
       <FourPlayerStatus players={r.players} me={me} countLabel="Confirmed" doneLabel="Confirmed" aiDoneLabel="Simulated"
         state={(p) => (f.resp[p.id] === "confirm" ? "done" : "waiting")} />
-      <div className="flex flex-col gap-2">
-        <Btn variant={mine === "confirm" ? "ok" : "primary"} disabled={busy || mine === "confirm"} onClick={() => act({ type: "final-respond", ledgerVersion: r.ledgerVersion || 0, value: "confirm" })}>
+      <div className="flex flex-row-reverse justify-start gap-3">
+        <Btn className="min-w-[220px]" variant={mine === "confirm" ? "ok" : "primary"} disabled={busy || mine === "confirm"} onClick={() => act({ type: "final-respond", ledgerVersion: r.ledgerVersion || 0, value: "confirm" })}>
           {mine === "confirm" ? <><Check size={16} /> Confirmed</> : "Confirm Final Scores"}
         </Btn>
-        <Btn variant="secondary" disabled={busy} onClick={() => act({ type: "final-respond", ledgerVersion: r.ledgerVersion || 0, value: "correct" })}>Request Correction</Btn>
+        <Btn variant="secondary" className="min-w-[200px] bg-card" disabled={busy} onClick={() => act({ type: "final-respond", ledgerVersion: r.ledgerVersion || 0, value: "correct" })}>Request Correction</Btn>
       </div>
     </section>
   );
@@ -519,7 +600,7 @@ function EndVote({ r, me, act, busy }: { r: PublicRoom; me: string; act: Act; bu
   const agreed = r.players.filter((p) => pr.votes[p.id] === "agree").length;
   return (
     <div className="fixed inset-0 z-40 bg-page flex flex-col" role="dialog" aria-modal aria-label="End the Game?">
-      <div className="flex-1 overflow-y-auto px-4 pt-[max(32px,env(safe-area-inset-top))] pb-4 flex flex-col gap-8 max-w-[430px] w-full mx-auto">
+      <div className="flex-1 overflow-y-auto px-4 pt-[max(32px,env(safe-area-inset-top))] pb-4 flex flex-col gap-8 max-w-[760px] w-full mx-auto">
         <div className="text-center">
           <h1 className="t-app text-green-text">End the Game?</h1>
           <p className="t-body text-muted mt-1">Waiting for everyone&apos;s decision.</p>
@@ -530,8 +611,8 @@ function EndVote({ r, me, act, busy }: { r: PublicRoom; me: string; act: Act; bu
           state={(p) => (pr.votes[p.id] === "agree" ? "done" : "waiting")} />
         {r.players.some(isAI) && <p className="t-meta text-muted text-center -mt-4">This demo includes simulated participants.</p>}
       </div>
-      <div className="px-4 pt-3 pb-safe border-t border-line max-w-[430px] w-full mx-auto">
-        <div className="grid grid-cols-1 gap-2 mb-3">
+      <div className="px-4 pt-3 pb-safe border-t border-line max-w-[760px] w-full mx-auto">
+        <div className="grid grid-cols-2 gap-3 mb-3">
           {mine !== "agree" && <Btn disabled={busy} onClick={() => act({ type: "end-vote", proposalId: pr.id, value: "agree" })}>Yes, End Game</Btn>}
           <Btn variant="secondary" className="bg-card" disabled={busy} onClick={() => act({ type: "end-vote", proposalId: pr.id, value: "keep" })}>Keep Playing</Btn>
         </div>
@@ -728,11 +809,11 @@ function WinFlow({ r, me, act, busy, revise, onClose, openCoach }: { r: PublicRo
 
   return (
     <div className="fixed inset-0 z-40 bg-page flex flex-col" role="dialog" aria-modal aria-label="Win">
-      <div className="pt-safe border-b border-line"><div className="h-14 px-2 flex items-center max-w-[430px] mx-auto">
+      <div className="pt-safe border-b border-line"><div className="h-14 px-2 flex items-center max-w-[760px] mx-auto">
         <button onClick={back} aria-label="Back" className="h-11 min-w-11 px-2 flex items-center gap-0.5 rounded-full hover:bg-surface"><ChevronLeft size={22} strokeWidth={1.75} /><span className="t-sub font-medium">Back</span></button>
       </div></div>
-      <div className="flex-1 overflow-y-auto"><div className="px-4 py-5 flex flex-col gap-5 max-w-[430px] mx-auto min-h-full">{body}</div></div>
-      <div className="px-4 pt-3 pb-safe border-t border-line"><div className="flex flex-col gap-2 mb-3 max-w-[430px] mx-auto">{footer}</div></div>
+      <div className="flex-1 overflow-y-auto"><div className="px-4 py-5 flex flex-col gap-5 max-w-[760px] mx-auto min-h-full">{body}</div></div>
+      <div className="px-4 pt-3 pb-safe border-t border-line"><div className="flex flex-col gap-2 mb-3 max-w-[760px] mx-auto">{footer}</div></div>
       <Sheet open={examples} onClose={() => setExamples(false)} title="See Examples">
         <div className="flex flex-col gap-4">
           {(["standard", "seven_pairs", "all_pungs"] as const).map((k) => (

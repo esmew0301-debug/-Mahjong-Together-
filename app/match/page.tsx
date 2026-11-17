@@ -4,7 +4,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, getProfile, lastRoom, rememberRoom } from "@/lib/client";
 import type { PublicPlayer } from "@/lib/types";
-import { Btn, Header } from "@/components/ui";
+import { Btn } from "@/components/ui";
+import { DeskCard, DeskPage } from "@/components/ui/desk";
 import { FourPlayerStatus } from "@/components/s3/FourPlayerStatus";
 import { WaitingProgressRing } from "@/components/ui/loader-15";
 
@@ -114,40 +115,39 @@ function Match() {
 
   const n = complete ? 4 : Math.max(1, Math.min(4, s.filled || players.length || 1));
   if (resume) return (
-    <div className="min-h-[100dvh] flex flex-col">
-      <Header title="Mahjong Together" onBack={() => router.push("/")} backLabel="Back" />
-      <main className="flex-1 flex flex-col items-center justify-center px-4 gap-3 text-center">
-        <h1 className="t-app text-green-text">You&apos;re Already at a Table</h1>
+    <DeskPage onBack={() => router.push("/")}>
+      <DeskCard className="max-w-[600px] text-center flex flex-col items-center gap-3">
+        <h1 className="text-[28px] leading-[36px] font-semibold text-green-text">You&apos;re Already at a Table</h1>
         <p className="t-body text-muted">Room {resume}. Resume it, or find a new table.</p>
-      </main>
-      <div className="px-4 pb-safe pt-3 flex flex-col gap-2">
-        <Btn className="w-full" onClick={() => router.replace(`/room/${resume}`)}>Resume Your Table</Btn>
-        <Btn variant="secondary" className="w-full mb-3 bg-card" onClick={() => setResume(null)}>Find a New Table</Btn>
-      </div>
-    </div>
+        <div className="flex gap-3 mt-3">
+          <Btn className="min-w-[200px]" onClick={() => router.replace(`/room/${resume}`)}>Resume Your Table</Btn>
+          <Btn variant="secondary" className="min-w-[200px] bg-card" onClick={() => setResume(null)}>Find a New Table</Btn>
+        </div>
+      </DeskCard>
+    </DeskPage>
   );
   return (
-    <div className="min-h-[100dvh] flex flex-col">
-      <Header title="Mahjong Together" onBack={cancel} backLabel="Back" />
-      <main className="flex-1 flex flex-col items-center px-4 pt-8 gap-7 text-center">
+    <DeskPage onBack={cancel}>
+      <DeskCard className="max-w-[860px] flex flex-col items-center gap-7 text-center">
         <WaitingProgressRing current={n} total={4} label="players" active={!complete} />
         <div>
-          <h1 className="t-app text-green-text">Finding Your Table</h1>
+          <h1 className="text-[28px] leading-[36px] font-semibold text-green-text">Finding Your Table</h1>
           <p className="t-body text-muted mt-1">Matching you with other players…</p>
         </div>
-        {/* Matched ≠ ready: joined seats stay neutral (no ✓); readiness is confirmed later in the Room Lobby. */}
+        {/* Matched ≠ ready: joined seats stay neutral (no ✓); readiness is confirmed in the Room Lobby. */}
         <FourPlayerStatus className="w-full" players={players} me={me.current} showOpenSeats animateIn doneLabel="Joined"
           state={() => "waiting"} labelFor={() => (complete ? "Matched" : "Joined")} />
-        <p className="t-sub text-muted" aria-live="polite">{complete ? "4/4 Matched · opening your table" : queue === "class" ? "Waiting for classmates to join…" : "Looking for available players"}</p>
-        {queue === "class" && !complete && left !== null && (s.filled || 0) < 4 && (
-          <p className="t-meta text-muted -mt-4 tabular-nums" aria-live="off">{left > 0 ? `Empty seats are filled with demo players in ${left}s` : "Filling empty seats…"}</p>
-        )}
-        {complete && players.some((p) => p.kind === "virtual") && <p className="t-meta text-muted -mt-4">This demo includes simulated participants.</p>}
+        <div className="flex flex-col gap-1" aria-live="polite">
+          <p className="t-body">{complete ? "4/4 Matched · opening your table" : queue === "class" ? "Waiting for classmates to join…" : "Looking for available players"}</p>
+          {queue === "class" && !complete && left !== null && (s.filled || 0) < 4 && (
+            <p className="t-sub text-muted tabular-nums" aria-live="off">{left > 0 ? `Empty seats are filled with simulated players in ${left}s` : "Filling empty seats…"}</p>
+          )}
+          {complete && players.some((p) => p.kind === "virtual") && <p className="t-sub text-muted">This demo includes simulated participants.</p>}
+          {queue === "class" && <p className="t-sub text-muted">Classroom teaching game: classmates may watch and see all four hands.</p>}
+        </div>
         {err && <p className="t-sub text-[#B42318] dark:text-[#FF6961]" role="alert">{err}</p>}
-      </main>
-      <div className="sticky bottom-0 bg-page px-4 pt-3 pb-safe">
-        <Btn variant="secondary" className="w-full mb-3 bg-card" disabled={leaving || complete} onClick={cancel}>Cancel</Btn>
-      </div>
-    </div>
+        <Btn variant="secondary" className="min-w-[200px] bg-card" disabled={leaving || complete} onClick={cancel}>Cancel</Btn>
+      </DeskCard>
+    </DeskPage>
   );
 }

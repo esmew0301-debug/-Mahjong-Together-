@@ -14,6 +14,8 @@ export interface WatchData {
   game?: string;
   featured?: boolean;
   session?: Session | null;
+  tables?: number;
+  gameOver?: boolean;
 }
 
 /**
@@ -33,13 +35,16 @@ export function useWatch(cls: string, game: string | null) {
   const [fatal, setFatal] = useState<ApiError | null>(null);
   const v = useRef({ rv: 0, fs: 0, dv: 0, gv: 0, pv: 0, pc: -1, game: "" });
   const fails = useRef(0);
+  const gen = useRef(0); // bumps when the watched table changes; responses from an older table are ignored
 
   const acceptDisc = useCallback((d: Discussion) => { if (d.v >= v.current.dv) { v.current.dv = d.v; setDisc(d); } }, []);
   const acceptPractice = useCallback((p: PracticeView) => { if (p.v >= v.current.pv) { v.current.pv = p.v; setPractice(p); } }, []);
 
   const poll = useCallback(async () => {
     const q = v.current;
+    const my = gen.current;
     const j = await api<any>(`/api/watch/${encodeURIComponent(cls)}?rv=${q.rv}&fs=${q.fs}&dv=${q.dv}&gv=${q.gv}&pv=${q.pv}&pc=${q.pc}${game ? `&game=${encodeURIComponent(game)}` : ""}`);
+    if (my !== gen.current) return; // started before the viewer switched tables
     if (j.game && j.game !== q.game) { Object.assign(q, { rv: 0, fs: 0, game: j.game }); setFeed([]); } // switched game
     if (j.view) {
       const sv = j.view as SpecView;
@@ -58,10 +63,11 @@ export function useWatch(cls: string, game: string | null) {
     if (j.groups) { q.gv = j.groups.v; setGroups(j.groups); }
     if (j.practice) acceptPractice(j.practice);
     if (j.people) { q.pc = j.pc; setPeople((p) => ({ ...p, ...j.people })); }
-    setData({ me: j.me, classroom: j.classroom, watching: j.watching, mode: j.mode, games: j.games, game: j.game, featured: j.featured, session: j.session });
+    setData({ me: j.me, classroom: j.classroom, watching: j.watching, mode: j.mode, games: j.games, game: j.game, session: j.session, tables: j.tables, gameOver: j.gameOver });
   }, [cls, game, acceptDisc, acceptPractice]);
 
   useEffect(() => {
+    gen.current++;
     let stop = false;
     let t: ReturnType<typeof setTimeout>;
     const tick = async () => {

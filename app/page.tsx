@@ -70,7 +70,7 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-5">
           <EntryCard primary title="Watch a Game" icon={<Eye size={24} />} onClick={() => router.push("/profile?next=watch")}
             desc="Learn by watching others play, asking questions, and discovering people who share your curiosity." />
-          <EntryCard title="Play Mahjong" icon={<TileIcon />} onClick={() => router.push("/play")}
+          <EntryCard title="Play Mahjong" icon={<TileIcon />} onClick={() => router.push("/profile?next=class")}
             desc="Create or join a room and play Sichuan Mahjong together." />
         </div>
         {recent && <button onClick={() => router.push(`/room/${recent}`)} className="t-sub text-muted min-h-11 self-center">Return to Room {recent}</button>}

@@ -127,7 +127,9 @@ export async function createMatchedRoom(humans: { name: string; avatar?: string 
     const code = `MAH-${rand(4)}`;
     const room = baseRoom(code, creds[0].pid, "Sichuan Table", players.map((p) => ({ ...p })), "Matched a table of four.");
     room.matched = true;
-    if (classroom) room.classroom = classroom;
+    // Classroom games are teaching games from the start: players are told (classroom entry, matching, lobby) that
+    // classmates may watch with all four hands visible. Private rooms never are.
+    if (classroom) { room.classroom = classroom; room.teaching = { classroom, since: Date.now() }; }
     addVirtualSeats(room, 4 - humans.length);
     autoVirtual(room);
     if (await kv.cas(roomKey(code), -1, JSON.stringify(room), TTL)) {
@@ -366,10 +368,13 @@ function applyActionInner(r: Room, pid: string, a: { type: string; [k: string]: 
       if (r.status !== "lobby") return; // already started — no-op
       r.lobbyReady = { ...(r.lobbyReady || {}), [pid]: true };
       if (r.players.length === 4 && ids(r).every((id) => r.lobbyReady![id])) {
+        // No tutorial gates: everyone pressed Start Playing → deal the first hand straight away.
         r.variant = "sichuan";
-        r.status = "setup";
-        push(r, msg({ sender: "system", text: "Everyone's ready." }));
-        enterStep(r, firstStep("sichuan"));
+        r.status = "playing";
+        initGame(r);
+        r.stepId = null; r.resp = {}; r.check = null;
+        push(r, msg({ sender: "system", text: "Everyone's ready. Game in progress." }));
+        dealMj(r);
       }
       return;
     }

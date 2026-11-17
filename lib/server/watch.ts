@@ -1,9 +1,10 @@
 import "server-only";
 import crypto from "crypto";
 import { kv } from "./kv";
-import { HttpError, authPid, classRoomsKey, cleanName, cookieName, getRoom, mutate, normCode, uid, cleanAvatar } from "./room";
+import { HttpError, authPid, classRoomsKey, cleanName, cookieName, getRoom, presenceMap, uid, cleanAvatar } from "./room";
 import { validClassCode } from "./match";
-import { FEED_MAX, loadSnap, snapshotOf } from "./feed";
+import { INVALID_CLASSROOM } from "../classroom";
+import { loadSnap, snapshotOf } from "./feed";
 import { displayName } from "../names";
 import type { Room } from "../types";
 import type { Discussion, GameSummary, Group, Groups, Practice, QRef, Question, Session, SpecView, Viewer } from "../watch/types";
@@ -12,7 +13,10 @@ import { recommendGroups } from "../watch/groups";
 import { SCENARIOS, scenarioOrder } from "../watch/scenarios";
 
 /**
- * Mahjong Together 4.0 — Spectator Mode (server). Completely separate from Player Mode:
+ * Mahjong Together 4.0 — Spectator Mode (server). Fully automatic (no host): every room matched in the classroom is a
+ * teaching game from creation (disclosed to players before they join), is listed for spectators straight away, gets one
+ * discussion session, and learning groups are recommended automatically when a hand / the game ends.
+ * Completely separate from Player Mode:
  *  - Spectators authenticate with their own httpOnly session cookie (mt_w_<CLASS>); they are never room members, so
  *    every player-only action (/api/rooms/.../action) rejects them (401).
  *  - The all-hands educational projection is built here only, only for rooms in classroom teaching mode, and is
@@ -22,7 +26,6 @@ import { SCENARIOS, scenarioOrder } from "../watch/scenarios";
  */
 const TTL = 60 * 60 * 24;
 const ONLINE_MS = 15_000;
-const classKey = (c: string) => `mt:class:${c}`;
 const specKey = (c: string) => `mt:class:${c}:spec`;
 const specPresKey = (c: string) => `mt:class:${c}:specp`;
 const discKey = (s: string) => `mt:obs:${s}`;
@@ -31,7 +34,6 @@ const pracKey = (g: string) => `mt:prac:${g}`;
 export const watchCookie = (c: string) => `mt_w_${c}`;
 const sha = (t: string) => crypto.createHash("sha256").update(t).digest("hex");
 
-export interface ClassDoc { v: number; code: string; featured: string | null; teachingRooms: string[]; sessions: Record<string, Session> }
 
 // ---------------------------------------------------------------- generic CAS document
 async function readDoc<T>(key: string): Promise<T | null> {
@@ -52,11 +54,9 @@ async function casDoc<T extends { v: number }, R>(key: string, init: () => T, fn
 
 export function requireClass(raw: unknown) {
   const c = validClassCode(raw);
-  if (!c) throw new HttpError(404, "We couldn't find that classroom. Check your code and try again.");
+  if (!c) throw new HttpError(404, INVALID_CLASSROOM);
   return c;
 }
-const emptyClass = (code: string): ClassDoc => ({ v: 0, code, featured: null, teachingRooms: [], sessions: {} });
-export const getClass = async (c: string) => (await readDoc<ClassDoc>(classKey(c))) || emptyClass(c);
 
 // ---------------------------------------------------------------- spectator sessions
 interface SpecRec { id: string; name: string; avatar: string; sh: string; joinedAt: number }
@@ -121,15 +121,35 @@ export function spectatorView(room: Room, fs: number): SpecView {
   };
 }
 
-const summary = (r: Room, cls: ClassDoc): GameSummary => ({
-  code: r.code, name: r.name, status: r.status, players: r.players.map((p) => ({ name: displayName(p.name), avatar: p.avatar, kind: p.kind })),
-  hand: r.mj?.hand ?? null, teaching: !!r.teaching, featured: cls.featured === r.code, classroom: r.classroom, createdAt: r.createdAt,
+const summary = (r: Room): GameSummary => ({
+  code: r.code, name: r.name, status: r.status === "complete" ? "Completed" : r.mj ? (r.mj.phase === "ended" ? `Playing · Hand ${r.mj.hand} over` : `Playing · Hand ${r.mj.hand}`) : "Waiting to start",
+  players: r.players.map((p) => ({ name: displayName(p.name), avatar: p.avatar, kind: p.kind })),
+  hand: r.mj?.hand ?? null, teaching: !!r.teaching, featured: false, classroom: r.classroom, createdAt: r.createdAt,
 });
+/** One discussion session per teaching game; it closes when the game is finished. */
+export const sessionOf = (r: Room): Session => ({ id: `o-${r.code}`, game: r.code, status: r.status === "complete" ? "ended" : "live", startedAt: r.createdAt });
+/** "The observed game ended": a hand is over, or the whole game is finished (the players may play another hand). */
+const gameOver = (r: Room) => r.status === "complete" || r.status === "session_review" || r.mj?.phase === "ended";
 
-/** Live teaching games a spectator may choose from. */
-async function teachingGames(c: string, cls: ClassDoc) {
-  const rooms = await Promise.all(cls.teachingRooms.map((code) => getRoom(code)));
-  return rooms.filter((r): r is Room => !!r && r.teaching?.classroom === c && r.status !== "complete");
+const ABANDONED_MS = 120_000;
+/** Rooms of this classroom a spectator may watch (newest first). The index lives in shared storage (Redis in
+ *  production), written when matching creates the room; the status always comes from the room itself. Finished
+ *  games and tables whose human players have all been gone for 2 minutes are not listed. */
+async function classGames(c: string, includeDone = false) {
+  const idx = await kv.hgetall(classRoomsKey(c));
+  const rooms = (await Promise.all(Object.keys(idx).map((code) => getRoom(code)))).filter((r): r is Room => !!r && r.teaching?.classroom === c && (includeDone || r.status !== "complete"));
+  const now = Date.now();
+  const alive = await Promise.all(rooms.map(async (r) => {
+    if (includeDone) return true;
+    const pres = await presenceMap(r.code);
+    return r.players.some((p) => p.kind !== "virtual" && now - Number(pres[p.id] || 0) < ABANDONED_MS) || now - r.createdAt < ABANDONED_MS;
+  }));
+  return rooms.filter((_, i) => alive[i]).sort((a, b) => b.createdAt - a.createdAt);
+}
+async function teachingRoom(c: string, game: string) {
+  const room = game ? await getRoom(game) : null;
+  if (!room || room.teaching?.classroom !== c) throw new HttpError(404, "This game isn't available for spectating.");
+  return room;
 }
 
 function onlineCount(pres: Record<string, string>) {
@@ -141,35 +161,30 @@ export interface WatchParams { game?: string | null; rv: number; fs: number; dv:
 
 /** One spectator poll. Sends only what changed since the client's versions. */
 export async function watchState(c: string, me: SpecRec, p: WatchParams, readCookie: (n: string) => string | undefined) {
-  const [cls, pres] = await Promise.all([getClass(c), kv.hgetall(specPresKey(c))]);
+  const pres = await kv.hgetall(specPresKey(c));
   if (Date.now() - Number(pres[me.id] || 0) > 4000) await kv.hset(specPresKey(c), me.id, String(Date.now()), TTL); // cheap presence
   pres[me.id] = String(Date.now());
   const base = { me: { id: me.id, name: me.name, avatar: me.avatar } as Viewer, classroom: c, watching: onlineCount(pres) };
 
-  // which game? featured first; otherwise the viewer's explicit choice among live teaching games
-  let game = cls.featured;
-  if (!game) {
-    const games = await teachingGames(c, cls);
-    if (p.game && games.some((g) => g.code === p.game)) game = p.game;
-    else if (games.length === 1) game = games[0].code;
-    else if (games.length > 1) return { ...base, mode: "select" as const, games: games.map((g) => summary(g, cls)) };
-    else {
-      // a just-finished featured game keeps its summary available
-      const ended = Object.values(cls.sessions).sort((a, b) => b.startedAt - a.startedAt)[0];
-      if (!ended) return { ...base, mode: "waiting" as const };
-      game = ended.game;
-    }
+  // which table? the viewer's explicit choice; otherwise the only live table; otherwise let them choose
+  let room: Room | null = null;
+  if (p.game) { const r = await getRoom(p.game); if (r && r.teaching?.classroom === c) room = r; }
+  if (!room) {
+    const games = await classGames(c);
+    if (games.length === 1) room = games[0];
+    else if (games.length > 1) return { ...base, mode: "select" as const, games: games.map(summary) };
+    else return { ...base, mode: "waiting" as const };
   }
-  const room = await getRoom(game);
-  const session = cls.sessions[game] || null;
-  if (room) assertNotPlayer(room, readCookie);
-  const mode = !room || !room.teaching ? (session ? "summary" : "waiting") : session?.status === "ended" || room.status === "complete" ? "summary" : "live";
+  assertNotPlayer(room, readCookie);
+  const session = sessionOf(room);
+  const mode = !room.mj ? "live" : gameOver(room) ? "summary" : "live";
 
-  const [disc, groups, specs] = await Promise.all([
-    session ? readDoc<Discussion>(discKey(session.id)) : null,
-    session ? readDoc<Groups>(groupsKey(session.id)) : null,
-    Object.keys(pres).length !== p.pc ? specMap(c) : null,
-  ]);
+  let groups = await readDoc<Groups>(groupsKey(session.id));
+  if (mode === "summary") {
+    const basis = `${room.mj?.hand ?? 0}:${room.status === "complete" ? "done" : "hand"}`;
+    if (groups?.basis !== basis) groups = await recommend(c, session.id, basis); // automatic, idempotent per hand end
+  }
+  const [disc, specs] = await Promise.all([readDoc<Discussion>(discKey(session.id)), Object.keys(pres).length !== p.pc ? specMap(c) : null]);
   const d = disc || { v: 0, questions: [] };
   const people = specs || (d.v !== p.dv || (groups?.v ?? 0) !== p.gv ? await specMap(c) : null);
   const myGroupId = groups?.assign[me.id];
@@ -179,8 +194,9 @@ export async function watchState(c: string, me: SpecRec, p: WatchParams, readCoo
     if (pr && pr.v !== p.pv) practice = redactPractice(pr, me.id);
   }
   return {
-    ...base, mode, game, featured: cls.featured === game, session,
-    view: room && room.teaching && room.v !== p.rv ? spectatorView(room, p.fs) : undefined,
+    ...base, mode, game: room.code, session, gameOver: room.status === "complete",
+    tables: (await classGames(c)).length,
+    view: room.v !== p.rv ? spectatorView(room, p.fs) : undefined,
     disc: d.v !== p.dv ? d : undefined,
     groups: groups && groups.v !== p.gv ? groups : undefined,
     practice,
@@ -189,9 +205,11 @@ export async function watchState(c: string, me: SpecRec, p: WatchParams, readCoo
   };
 }
 
+/** Table list for "Choose a Table to Watch" (also used to switch tables). */
+export async function tableList(c: string) { return (await classGames(c)).map(summary); }
+
 export async function snapshotFor(c: string, game: string, seq: number, readCookie: (n: string) => string | undefined) {
-  const room = await getRoom(game);
-  if (!room || room.teaching?.classroom !== c) throw new HttpError(404, "This game isn't available for spectating.");
+  const room = await teachingRoom(c, game);
   assertNotPlayer(room, readCookie);
   const ev = (room.feed || []).find((e) => e.seq === seq);
   const snap = ev ? await loadSnap(game, seq) : null;
@@ -202,23 +220,22 @@ export async function snapshotFor(c: string, game: string, seq: number, readCook
 // ---------------------------------------------------------------- discussion
 const ACTS = ["ask", "reply", "same", "group-accept", "group-decline", "general-join", "group-leave", "prac-answer", "prac-reveal", "prac-next", "prac-chat", "prac-emoji"];
 const lastPost = new Map<string, number>(); // best-effort per-instance spam guard; the document check below is authoritative
-function liveSession(cls: ClassDoc, game: string) {
-  const s = cls.sessions[game];
-  if (!s || s.status !== "live") throw new HttpError(409, "The observation session has ended. Questions are closed.");
+function liveSession(room: Room) {
+  const s = sessionOf(room);
+  if (s.status !== "live") throw new HttpError(409, "This game has finished. Questions are closed.");
   return s;
 }
 const cleanText = (t: unknown, max: number) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
 export async function spectatorAct(c: string, me: SpecRec, a: Record<string, unknown>, readCookie: (n: string) => string | undefined) {
-  const cls = await getClass(c);
-  const game = String(a.game || cls.featured || "");
+  let game = String(a.game || "");
+  if (!game) { const live = await classGames(c); if (live.length === 1) game = live[0].code; } // same rule as the poll
   const type = String(a.type);
   if (!ACTS.includes(type)) throw new HttpError(400, "Unknown action"); // spectators have no game actions at all
   if (["ask", "reply", "same"].includes(type)) {
-    const room = await getRoom(game);
-    if (!room || room.teaching?.classroom !== c) throw new HttpError(404, "This game isn't available for spectating.");
+    const room = await teachingRoom(c, game);
     assertNotPlayer(room, readCookie);
-    const s = liveSession(cls, game);
+    const s = liveSession(room);
     if (type === "ask" || type === "reply") {
       const text = cleanText(a.text, 280);
       if (text.length < 2) throw new HttpError(400, "Type your question first.");
@@ -260,19 +277,15 @@ export async function spectatorAct(c: string, me: SpecRec, a: Record<string, unk
       q.same = on ? (q.same.includes(me.id) ? q.same : [...q.same, me.id]) : q.same.filter((x) => x !== me.id);
     })).doc;
   }
-  return groupAct(c, cls, game, me, type, a);
+  const room = await teachingRoom(c, game);
+  assertNotPlayer(room, readCookie);
+  return groupAct(sessionOf(room), me, type, a);
 }
 
 // ---------------------------------------------------------------- groups & practice
-const sessionFor = (cls: ClassDoc, game: string) => {
-  const s = cls.sessions[game];
-  if (!s) throw new HttpError(409, "There is no observation session yet.");
-  return s;
-};
 const acceptedOf = (g: Group) => g.members.filter((m) => g.status[m] === "accepted");
 
-async function groupAct(c: string, cls: ClassDoc, game: string, me: SpecRec, type: string, a: Record<string, unknown>) {
-  const s = sessionFor(cls, game);
+async function groupAct(s: Session, me: SpecRec, type: string, a: Record<string, unknown>) {
   const init = (): Groups => ({ v: 0, computedAt: null, groups: [], assign: {} });
   if (type === "group-accept" || type === "group-decline" || type === "general-join" || type === "group-leave") {
     const { doc, out } = await casDoc<Groups, string | null>(groupsKey(s.id), init, (d) => {
@@ -339,90 +352,19 @@ export function redactPractice(pr: Practice, me: string) {
   return pr.stage === "reveal" ? { ...pr, answered: Object.keys(pr.answers) } : { ...pr, answers: pr.answers[me] ? { [me]: pr.answers[me] } : {}, answered: Object.keys(pr.answers) };
 }
 
-// ---------------------------------------------------------------- host (classroom organizer)
-const HOST_KEY = process.env.CLASSROOM_HOST_KEY || (process.env.NODE_ENV !== "production" ? "teach-cogs123" : "");
-export const hostCookieName = "mt_host";
-const hostToken = () => crypto.createHmac("sha256", HOST_KEY).update("mahjong-together-host-v1").digest("base64url");
-export function hostLogin(key: unknown) {
-  if (!HOST_KEY) throw new HttpError(503, "Host controls aren't configured. Set CLASSROOM_HOST_KEY on the server.");
-  const a = Buffer.from(sha(String(key ?? ""))), b = Buffer.from(sha(HOST_KEY));
-  if (!crypto.timingSafeEqual(a, b)) throw new HttpError(403, "That host key isn't correct.");
-  return hostToken();
-}
-export function requireHost(cookie: string | undefined) {
-  if (!HOST_KEY || !cookie) throw new HttpError(401, "Host sign-in required.");
-  const a = Buffer.from(cookie), b = Buffer.from(hostToken());
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new HttpError(401, "Host sign-in required.");
-}
-
-export async function hostState(c: string) {
-  const cls = await getClass(c);
-  const idx = await kv.hgetall(classRoomsKey(c));
-  const codes = [...new Set([...Object.keys(idx), ...cls.teachingRooms])];
-  const rooms = (await Promise.all(codes.map((x) => getRoom(x)))).filter((r): r is Room => !!r).sort((a, b) => b.createdAt - a.createdAt);
-  const s = cls.featured ? cls.sessions[cls.featured] : null;
-  const [disc, groups, pres] = await Promise.all([s ? readDoc<Discussion>(discKey(s.id)) : null, s ? readDoc<Groups>(groupsKey(s.id)) : null, kv.hgetall(specPresKey(c))]);
-  const topics: Record<string, number> = {};
-  for (const q of disc?.questions || []) topics[q.topic] = (topics[q.topic] || 0) + q.same.length;
-  return {
-    classroom: c, featured: cls.featured, session: s, games: rooms.filter((r) => r.status !== "complete").map((r) => summary(r, cls)),
-    stats: { watching: onlineCount(pres), viewers: Object.keys(pres).length, questions: disc?.questions.length || 0, replies: (disc?.questions || []).reduce((n, q) => n + q.replies.length, 0), topics,
-      groups: groups?.groups.length || 0, accepted: Object.keys(groups?.assign || {}).length, computedAt: groups?.computedAt ?? null },
-  };
-}
-
-export async function hostAct(c: string, a: Record<string, unknown>) {
-  const type = String(a.type);
-  if (type === "feature") {
-    const code = normCode(String(a.room || ""));
-    if (!code) throw new HttpError(400, "Enter a game room code like MAH-AB12.");
-    const room = await getRoom(code);
-    if (!room) throw new HttpError(404, "That game room wasn't found.");
-    if (room.status === "complete") throw new HttpError(409, "That game has already finished.");
-    if (room.teaching && room.teaching.classroom !== c) throw new HttpError(409, "That game is a teaching game in another classroom.");
-    if (!room.teaching) {
-      // Disclosure before play: teaching mode can only be enabled before the first hand is dealt.
-      if (room.mj) throw new HttpError(409, "This game has already started. Enable teaching mode before the first hand, so the players are told first.");
-      await mutate(code, (r) => {
-        if (r.mj) throw new HttpError(409, "This game has already started. Enable teaching mode before the first hand, so the players are told first.");
-        r.teaching = { classroom: c, since: Date.now() };
-      });
-    }
-    await casDoc<ClassDoc, void>(classKey(c), () => emptyClass(c), (d) => {
-      d.featured = code;
-      if (!d.teachingRooms.includes(code)) d.teachingRooms.push(code);
-      if (!d.sessions[code] || d.sessions[code].status === "ended") d.sessions[code] = { id: `o-${uid()}`, game: code, status: "live", startedAt: Date.now() };
-    });
-  } else if (type === "unfeature") {
-    await casDoc<ClassDoc, void>(classKey(c), () => emptyClass(c), (d) => { d.featured = null; });
-  } else if (type === "start-session" || type === "end-session") {
-    await casDoc<ClassDoc, void>(classKey(c), () => emptyClass(c), (d) => {
-      if (!d.featured) throw new HttpError(409, "Select a featured teaching game first.");
-      const cur = d.sessions[d.featured];
-      if (type === "start-session") { if (!cur || cur.status === "ended") d.sessions[d.featured] = { id: `o-${uid()}`, game: d.featured, status: "live", startedAt: Date.now() }; }
-      else if (cur && cur.status === "live") d.sessions[d.featured] = { ...cur, status: "ended", endedAt: Date.now() };
-    });
-    if (type === "end-session") await recommend(c); // the summary shows recommendations straight away
-  } else if (type === "recommend") {
-    await recommend(c);
-  } else throw new HttpError(400, "Unknown action");
-  return hostState(c);
-}
-
-/** Compute (or refresh) learning-group recommendations from REAL public questions and +1s. Groups that already have
- *  an accepted member are kept as they are; everyone else is re-matched. */
-async function recommend(c: string) {
-  const cls = await getClass(c);
-  const s = cls.featured ? cls.sessions[cls.featured] : null;
-  if (!s) throw new HttpError(409, "There is no observation session yet.");
-  const disc = (await readDoc<Discussion>(discKey(s.id))) || { v: 0, questions: [] };
+// ---------------------------------------------------------------- automatic learning groups
+/** Recommend learning groups from REAL public questions and +1s (runs automatically when a hand / the game ends).
+ *  Groups that already have an accepted member are kept as they are; everyone else is re-matched. */
+async function recommend(c: string, sessionId: string, basis: string) {
+  const disc = (await readDoc<Discussion>(discKey(sessionId))) || { v: 0, questions: [] };
   const viewers = Object.keys(await specMap(c));
-  await casDoc<Groups, void>(groupsKey(s.id), () => ({ v: 0, computedAt: null, groups: [], assign: {} }), (d) => {
+  return (await casDoc<Groups, void>(groupsKey(sessionId), () => ({ v: 0, computedAt: null, groups: [], assign: {} }), (d) => {
+    if (d.basis === basis) return; // another request already did it
     const keep = d.groups.filter((g) => g.kind === "general" || acceptedOf(g).length);
     const placed = new Set(keep.flatMap((g) => g.members.filter((m) => g.status[m] !== "declined")));
     const fresh = recommendGroups(disc, viewers.filter((v) => !placed.has(v)), Date.now(), () => `g-${uid()}`);
     d.groups = [...keep, ...fresh];
     d.computedAt = Date.now();
-  });
+    d.basis = basis;
+  })).doc;
 }
-export { FEED_MAX };

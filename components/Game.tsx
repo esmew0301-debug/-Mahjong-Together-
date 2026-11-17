@@ -687,10 +687,10 @@ export function FinalResults({ r, me, onHome, reflection, playAgain }: { r: Publ
   return (
     <div className="min-h-[100dvh] flex flex-col pt-safe relative">
       <Confetti ref={confettiRef} manualstart globalOptions={globalOptions} className="pointer-events-none fixed inset-0 z-30 w-full h-full" aria-hidden />
-      <div className="h-14 px-4 flex items-center justify-between t-app">Mahjong Together<span className="-mr-2"><ThemeToggle /></span></div>
-      <main className="flex-1 px-4 py-4 flex flex-col gap-6">
-        <div>
-          <h1 className="t-app">Game Complete!</h1>
+      <div className="h-16 w-full max-w-[1200px] mx-auto px-6 flex items-center justify-between t-app text-green-text border-b border-line">Mahjong Together<span className="-mr-2"><ThemeToggle /></span></div>
+      <main className="flex-1 w-full max-w-[1100px] mx-auto px-6 py-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-x-12 gap-y-6 content-start">
+        <div className="col-span-2">
+          <h1 className="text-[30px] leading-[38px] font-semibold">Game Complete!</h1>
           <p className="t-body text-muted">Final Results</p>
           {scored ? (() => {
             const firsts = ranked.filter((p) => (totals[p.id] || 0) === top).map((p) => displayName(p.name));
@@ -702,7 +702,7 @@ export function FinalResults({ r, me, onHome, reflection, playAgain }: { r: Publ
             {[r.endedEarly ? "Completed — Ended by Group Agreement" : null, handsPlayed ? `${handsPlayed} hand${handsPlayed === 1 ? "" : "s"}` : null, variant?.name, "game points only"].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <section aria-label="Final results chart" data-chart="results" className="flex items-end justify-between gap-3 h-[244px] px-1 pt-8">
+        <section aria-label="Final results chart" data-chart="results" className="flex items-end justify-between gap-6 h-[340px] px-4 pt-8 rounded-[22px] border border-line bg-card">
           {bars.map((p, i) => {
             const v = totals[p.id] || 0;
             const isTop = scored && v === top;
@@ -720,15 +720,15 @@ export function FinalResults({ r, me, onHome, reflection, playAgain }: { r: Publ
                   initial={reduce ? false : { height: 0 }}
                   animate={{ height: `${heightPct(v)}%` }}
                   transition={reduce ? { duration: 0 } : { duration: 0.5 + i * 0.12, ease: "easeOut" }}
-                  className={cx("w-full max-w-[64px] rounded-t-[14px] rounded-b-[6px]", isTop ? "bg-green" : "bg-bubble border border-line")}
+                  className={cx("w-full max-w-[88px] rounded-t-[14px] rounded-b-[6px]", isTop ? "bg-green" : "bg-bubble border border-line")}
                 />
                 </div>
-                <span className="t-meta text-muted truncate max-w-full pt-1" title={displayName(p.name)}>{displayName(p.name)}</span>
+                <span className="t-sub text-muted truncate max-w-full pt-1 pb-3" title={displayName(p.name)}>{displayName(p.name)}</span>
               </div>
             );
           })}
         </section>
-        <ol className="flex flex-col divide-y divide-line -mt-2">
+        <ol className="flex flex-col divide-y divide-line self-start rounded-[22px] border border-line bg-card px-5 py-2">
           {ranked.map((p) => (
             <li key={p.id} className="flex items-center gap-3 py-2 t-body">
               {scored && <span className="w-7 t-sub text-muted">#{rankOf(p.id)}</span>}
@@ -738,9 +738,9 @@ export function FinalResults({ r, me, onHome, reflection, playAgain }: { r: Publ
             </li>
           ))}
         </ol>
-        {scored && ranked.filter((p) => (totals[p.id] || 0) === top).length > 1 && <p className="t-sub text-muted -mt-3">Tied for first place — no tie-breaker applied.</p>}
-        {committed.some((e) => (e.simulated || []).length > 0) && <p className="t-meta text-muted -mt-3">Demo session: includes simulated confirmations from AI Players.</p>}
-        <section className="flex flex-col gap-2">
+        {scored && ranked.filter((p) => (totals[p.id] || 0) === top).length > 1 && <p className="t-sub text-muted col-span-2">Tied for first place — no tie-breaker applied.</p>}
+        {committed.some((e) => (e.simulated || []).length > 0) && <p className="t-meta text-muted col-span-2">Demo session: includes simulated confirmations from AI Players.</p>}
+        <section className="flex flex-col gap-2 col-span-2">
           <button onClick={() => setShowBreakdown(!showBreakdown)} aria-expanded={showBreakdown} className="flex items-center justify-between t-section min-h-11">View Score Details <ChevronDown size={18} className={cx("text-muted", showBreakdown && "rotate-180")} /></button>
           {showBreakdown && (
             <>
@@ -752,15 +752,15 @@ export function FinalResults({ r, me, onHome, reflection, playAgain }: { r: Publ
           )}
         </section>
 
-        {reflection}
+        <div className="col-span-2">{reflection}</div>
       </main>
-      <div className="sticky bottom-0 z-40 bg-page px-4 pt-3 pb-safe border-t border-line">
+      <div className="w-full max-w-[1100px] mx-auto px-6 pb-10 flex justify-end gap-3">
         {playAgain && (
-          <Btn variant="secondary" className="w-full mb-2 bg-card" disabled={playAgain.mine} onClick={playAgain.onClick}>
+          <Btn variant="secondary" className="min-w-[240px] bg-card" disabled={playAgain.mine} onClick={playAgain.onClick}>
             {playAgain.mine ? `Waiting for everyone… (${playAgain.agreed}/4)` : "Play Again Together"}
           </Btn>
         )}
-        <Btn className="w-full" onClick={onHome}>Back to Home</Btn>
+        <Btn className="min-w-[200px]" onClick={onHome}>Back to Home</Btn>
       </div>
     </div>
   );

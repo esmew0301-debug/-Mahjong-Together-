@@ -2,6 +2,7 @@ import "server-only";
 import crypto from "crypto";
 import { kv } from "./kv";
 import { HttpError, cleanAvatar, cleanName, createMatchedRoom, getRoom, roomKey, uid } from "./room";
+import { CLASSROOM_CODE, INVALID_CLASSROOM, normalizeClassroom } from "../classroom";
 
 /**
  * Random Match: server-side FIFO queues, updated only through the store's atomic compare-and-set.
@@ -22,8 +23,8 @@ export const MATCH_TIMEOUT_MS = Math.max(1000, Math.min(120_000, Number(process.
 export const CLASS_WINDOW_MS = Math.max(3000, Math.min(600_000, Number(process.env.CLASS_MATCH_WINDOW_MS) || 25_000));
 
 /** Shared classroom matchmaking codes (NOT room ids). Case-insensitive; the first one is the classroom QR queue. */
-export const CLASSROOM_CODES = (process.env.CLASSROOM_CODES || "COGS123").split(",").map((c) => normalizeClassCode(c)).filter(Boolean);
-export function normalizeClassCode(raw: unknown) { return String(raw ?? "").trim().toUpperCase().replace(/\s+/g, "").slice(0, 24); }
+export const CLASSROOM_CODES = [CLASSROOM_CODE]; // exactly one classroom in this demo
+export function normalizeClassCode(raw: unknown) { return normalizeClassroom(raw).slice(0, 24); }
 export const validClassCode = (raw: unknown) => { const c = normalizeClassCode(raw); return CLASSROOM_CODES.includes(c) ? c : null; };
 
 export type QueueName = "default" | `class:${string}`;
@@ -41,7 +42,7 @@ const QUEUES = new Proxy({} as Record<QueueName, QueueCfg>, { get: (_t, k) => cf
 export const queueName = (raw: unknown, code?: unknown): QueueName => {
   if (raw !== "class") return "default";
   const c = code === undefined || code === null || code === "" ? CLASSROOM_CODES[0] : validClassCode(code);
-  if (!c) throw new HttpError(404, "That classroom code wasn't found. Check it with your instructor.");
+  if (!c) throw new HttpError(404, INVALID_CLASSROOM);
   return `class:${c}`;
 };
 export const queueCookie = (q: QueueName) => QUEUES[q].cookie;

@@ -15,8 +15,8 @@ export function cx(...c: (string | false | null | undefined)[]) {
 
 export function Header({ title, subtitle, onBack, backLabel, right, children, titleClassName, backClassName }: { title: string; subtitle?: React.ReactNode; onBack?: () => void; backLabel?: string; right?: React.ReactNode; children?: React.ReactNode; titleClassName?: string; backClassName?: string }) {
   return (
-    <header className="pt-safe sticky top-0 z-20 bg-page/95 backdrop-blur border-b border-line">
-      <div className="h-14 px-2 flex items-center gap-1">
+    <header className="sticky top-0 z-20 bg-page/95 backdrop-blur border-b border-line">
+      <div className="h-16 w-full max-w-[1200px] mx-auto px-6 flex items-center gap-2">
         {onBack ? (
           <button onClick={onBack} aria-label={backLabel || "Back"} className={cx("h-11 min-w-11 px-2 flex items-center gap-0.5 rounded-full shrink-0", backClassName || "text-ink hover:bg-surface")}>
             <ChevronLeft size={22} strokeWidth={1.75} />
@@ -25,8 +25,9 @@ export function Header({ title, subtitle, onBack, backLabel, right, children, ti
         ) : (
           <div className="w-2" />
         )}
+        <span className="t-app text-green-text whitespace-nowrap px-1">Mahjong Together</span>
         <div className="flex-1 min-w-0 px-1">
-          <div className={cx("t-section truncate", titleClassName)}>{title}</div>
+          {title && <div className={cx("t-section truncate", titleClassName)}>{title}</div>}
           {subtitle && <div className="t-meta text-muted truncate">{subtitle}</div>}
         </div>
         <div className="flex items-center gap-0.5 pr-1 shrink-0">{right}<ThemeToggle /></div>
@@ -91,9 +92,9 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal aria-label={title}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal aria-label={title}>
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-[430px] max-h-[88dvh] bg-bg rounded-t-[20px] shadow-sheet flex flex-col pb-safe">
+      <div className="relative w-full max-w-[560px] max-h-[86dvh] bg-card rounded-[22px] shadow-sheet flex flex-col">
         <div className="flex items-center gap-2 px-4 h-14 border-b border-line shrink-0">
           <div className="t-page flex-1 min-w-0 truncate">{title}</div>
           <button onClick={onClose} aria-label="Close" className="h-11 w-11 -mr-2 rounded-full flex items-center justify-center hover:bg-surface">

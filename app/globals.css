@@ -100,14 +100,20 @@ body { -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 * { -webkit-tap-highlight-color: transparent; }
 textarea, input { font-size: 16px; }
 
+/* Desktop-only demo: pages are full-width (each page constrains its own content); no phone column. */
 .app-col {
   width: 100%;
-  max-width: 430px;
-  margin: 0 auto;
   min-height: 100dvh;
   background: var(--page);
   position: relative;
 }
+.desktop-only-msg { display: none; }
+@media (max-width: 899px) {
+  .app-col { display: none; }
+  .desktop-only-msg { display: flex; }
+}
+/* main interface text never below 14px */
+.app-col .t-meta { font-size: 14px; line-height: 20px; }
 /* Private AI Assistant: shares the warm page background; its chat surfaces (bubbles, composer) are unchanged. */
 .coach-classic { background: var(--page); min-height: 100dvh; }
 /* Shared motion for avatars appearing (matching) — transform/opacity only. */
@@ -119,18 +125,13 @@ textarea, input { font-size: 16px; }
 @keyframes mt-fade { 0% { opacity: 0; } 10% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
 .mt-fade { animation: mt-fade 4.2s ease forwards; }
 @media (prefers-reduced-motion: reduce) { .mt-fade { animation: mt-fade 4.2s ease forwards !important; } }
-@media (min-width: 640px) {
-  body { background: color-mix(in srgb, var(--page) 94%, var(--fg)); }
-  .app-col { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-}
+
 .pb-safe { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 .pt-safe { padding-top: env(safe-area-inset-top); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
 /* ---------- Mahjong Together 4.0: desktop pages (homepage, Spectator Mode, host) escape the phone column ---------- */
-.app-col:has([data-wide]) { max-width: none; border: 0; }
-@media (min-width: 640px) { body:has([data-wide]) { background: var(--page); } }
 [data-wide] .t-meta { font-size: 14px; line-height: 20px; } /* no main-interface text below 14px */
 /* Spectator table: one tile unit scales with the viewport so the whole table fits a laptop screen without scrolling. */
 .spec-table {

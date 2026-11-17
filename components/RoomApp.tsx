@@ -59,8 +59,8 @@ export function RoomApp({ code }: { code: string }) {
   if (room.fatal)
     return (
       <div className="min-h-[100dvh] flex flex-col">
-        <Header title="Mahjong Together" onBack={() => router.push("/")} />
-        <div className="px-4 py-6 t-body">
+        <Header title="" onBack={() => router.push("/")} />
+        <div className="w-full max-w-[860px] mx-auto px-6 py-10 t-body">
           {room.fatal.config ? "Live rooms aren't set up on this deployment yet. The site owner needs to connect Upstash Redis (see README)." : "This room no longer exists. Rooms expire 24 hours after they're created."}
         </div>
       </div>
@@ -740,11 +740,11 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
           <Btn variant="secondary" className="min-h-10 px-3" onClick={onBack}>Go Vote</Btn>
         </div>
       )}
-      <main ref={coachMain} className="flex-1 px-4 py-6 flex flex-col gap-6">
+      <main ref={coachMain} className="flex-1 w-full max-w-[860px] mx-auto px-6 py-8 flex flex-col gap-6">
         <div className="flex flex-col gap-2">
           <div className="t-section">Ask privately</div>
           <Prose text={`I'm your private Rule Assistant. Ask about ${variant ? variant.name : "Mahjong"} rules or general strategy without sharing it with the table. I can't see your tiles, so describe them in text if you want help thinking a decision through.`} />
-          <p className="t-meta text-muted flex items-start gap-1.5"><Lock size={12} strokeWidth={2} className="mt-[3px] shrink-0" /> Your private messages are tied to your seat on this device. The host and other players can't open them.</p>
+          <p className="t-meta text-muted flex items-start gap-1.5"><Lock size={12} strokeWidth={2} className="mt-[3px] shrink-0" /> Your private messages are tied to your seat on this device. Other players can't open them.</p>
           {r.status === "playing" && <Btn variant="secondary" className="self-start mt-1" onClick={() => setCheckOpen(true)}>Check My Hand</Btn>}
         </div>
         {msgs === null ? <p className="t-sub text-muted">Loading…</p> : <MessageList messages={msgs} me={me} onDetail={setDetail} onAction={onAction} onReact={react} busy={thinking} />}
@@ -753,6 +753,7 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
       </main>
       <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
+      <div className="sticky bottom-0 z-10 w-full max-w-[860px] mx-auto">
       <Composer
         inputRef={inputRef}
         placeholder="Ask your private coach..."
@@ -774,6 +775,7 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
           </div>
         ) : null}
       />
+      </div>
       <Sheet open={!!detail} onClose={() => setDetail(null)} title={detail?.title || "Details"}>
         {detail && (<><Prose text={detail.detail || detail.text} />{detail.source && <p className="t-meta text-muted mt-4 pt-3 border-t border-line">Source: {detail.source}</p>}</>)}
       </Sheet>

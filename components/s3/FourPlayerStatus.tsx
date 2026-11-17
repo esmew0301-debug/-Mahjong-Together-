@@ -38,12 +38,12 @@ export function FourPlayerStatus({ players, me, state, doneLabel, aiDoneLabel, c
   return (
     <section className={cx("flex flex-col gap-3", className)} aria-label={countLabel ? `${n} of 4 ${countLabel}` : "Players"}>
       {countLabel && <p className={cx("t-sub font-semibold text-center", n === 4 ? "text-green-text" : "text-green-text")} aria-live="polite">{n} of 4 {countLabel}</p>}
-      <ul className="grid grid-cols-4 gap-1.5">
+      <ul className="grid grid-cols-4 gap-4">
         {slots.map((p, i) => {
           if (!p)
             return (
-              <li key={`open-${i}`} className="flex flex-col items-center min-w-0 text-center" aria-label="Open seat">
-                <span className="h-[52px] w-[52px] max-[359px]:h-11 max-[359px]:w-11 rounded-full border-2 border-dashed border-dash" aria-hidden />
+              <li key={`open-${i}`} className="flex flex-col items-center min-w-0 text-center rounded-[18px] border border-dashed border-dash px-3 py-5" aria-label="Open seat">
+                <span className="h-16 w-16 rounded-full border-2 border-dashed border-dash" aria-hidden />
                 <span className="mt-1.5 t-sub text-muted truncate max-w-full">Open seat</span>
               </li>
             );
@@ -54,17 +54,17 @@ export function FourPlayerStatus({ players, me, state, doneLabel, aiDoneLabel, c
           // No repeated "AI" tag under each avatar; screens with demo seats show one short disclosure instead.
           const sub = p.id === me ? `You · ${label}` : label;
           return (
-            <li key={`${i}-${p.name}`} className={cx("flex flex-col items-center min-w-0 text-center", animateIn && "mt-pop")}
+            <li key={`${i}-${p.name}`} className={cx("flex flex-col items-center min-w-0 text-center rounded-[18px] border bg-card px-3 py-5", done ? "border-green" : "border-line", animateIn && "mt-pop")}
               style={animateIn && ai ? { animationDelay: `${slots.slice(0, i).filter((x) => x?.kind === "virtual").length * 200}ms` } : undefined} aria-label={`${p.name}${ai ? ", simulated participant" : ""}${p.id === me ? " (you)" : ""}: ${label}`}>
               <span className="relative" aria-hidden>
-                <span className={cx("h-[52px] w-[52px] max-[359px]:h-11 max-[359px]:w-11 rounded-full bg-card border-2 flex items-center justify-center transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)]", done ? "border-green" : "border-line")}>
-                  <span style={{ ...EMOJI_FONT, fontSize: 28, lineHeight: 1 }}>{emojiFor(p)}</span>
+                <span className={cx("h-16 w-16 rounded-full bg-page border-2 flex items-center justify-center transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)]", done ? "border-green" : "border-line")}>
+                  <span style={{ ...EMOJI_FONT, fontSize: 34, lineHeight: 1 }}>{emojiFor(p)}</span>
                 </span>
                 <span className={cx("absolute -bottom-0.5 -right-0.5 h-[19px] w-[19px] rounded-full bg-green-strong text-white ring-2 ring-page flex items-center justify-center transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.2,0,0,1)]", done ? "opacity-100 scale-100" : "opacity-0 scale-50")}>
                   <Check size={11} strokeWidth={3.2} />
                 </span>
               </span>
-              <span className="mt-1.5 t-sub font-medium truncate max-w-full" title={p.name}>{p.name}</span>
+              <span className="mt-2.5 t-section truncate max-w-full" title={p.name}>{p.name}</span>
               <span className={cx("t-meta truncate max-w-full", done ? "text-green-text" : "text-muted")}>{sub}</span>
             </li>
           );

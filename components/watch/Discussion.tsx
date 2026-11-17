@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Lightbulb, MessageSquare, Send, X } from "lucide-react";
 import type { Discussion as Disc, QRef, Question, SpecSnap, Viewer } from "@/lib/watch/types";
-import { TOPIC_LABEL, classify } from "@/lib/watch/topics";
+import { classify } from "@/lib/watch/topics";
 import { COACH_STARTERS, coachAnswer } from "@/lib/watch/coach";
 import { tileName } from "@/lib/mj/rules";
 import { Btn, cx } from "@/components/ui";
@@ -108,7 +108,6 @@ function QuestionCard({ q, people, me, now, act, onRef, closed }: { q: Question;
         <VAvatar v={a} size={30} />
         <span className="t-sub font-semibold truncate">{a?.name || "Viewer"}{q.author === me ? " (you)" : ""}</span>
         <span className="t-sub text-muted shrink-0">· {ago(q.ts, now)}</span>
-        <span className="ml-auto t-sub text-green-text bg-green-soft rounded-full px-2 shrink-0">{TOPIC_LABEL[q.topic]}</span>
       </div>
       {q.ref ? <RefChip r={q.ref} onClick={() => onRef(q.ref!)} compact /> : <span className="t-sub text-muted">General question</span>}
       <p className="t-body break-words">{q.text}</p>
@@ -207,12 +206,12 @@ export function DiscussionPanel({ disc, people, me, act, selRef, clearRef, onRef
         {!list.length && <li className="t-body text-muted text-center py-8 px-4">{filter === "all" ? "Be the first to ask about a move." : filter === "move" ? "No questions about this move yet." : "Nothing here yet."}</li>}
       </ul>
       {closed ? (
-        <div className="border-t border-line px-4 py-3 t-sub text-muted">The observation session has ended. Questions are closed.</div>
+        <div className="border-t border-line px-4 py-3 t-sub text-muted">This game has finished. Questions are closed.</div>
       ) : (
         <form className="border-t border-line px-3 pt-2.5 pb-3 flex flex-col gap-2 bg-card" onSubmit={(e) => { e.preventDefault(); post(); }} data-composer>
           {similar.length > 0 && (
             <div className="rounded-[14px] bg-sage p-2.5 flex flex-col gap-1.5 mt-pop" data-similar>
-              <p className="t-sub font-semibold">Others are asking something similar.</p>
+              <p className="t-sub font-semibold">Others have a similar question.</p>
               {similar.map((q) => (
                 <div key={q.id} className="flex items-center gap-2">
                   <p className="t-sub flex-1 min-w-0 truncate">“{q.text}”</p>

@@ -60,10 +60,24 @@ export function WatchApp({ cls }: { cls: string }) {
   const [toast, setToast] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [screen, setScreen] = useState<"auto" | "practice" | "table">("auto");
+  // The summary appears automatically when the watched hand / game ends and stays until the viewer leaves it.
+  const [sticky, setSticky] = useState(false);
+  const summaryKey = useRef("");
   const tableBox = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
   const [bubble, setBubble] = useState<{ left: number; top: number } | null>(null);
 
+  // pin the table being watched — but after "Switch Table", only from a response that arrived after the switch
+  const switchedAt = useRef<unknown>(null);
+  useEffect(() => {
+    if (switchedAt.current) { if (data === switchedAt.current) return; switchedAt.current = null; }
+    if (!game && data?.game && data.mode !== "select") setGame(data.game);
+  }, [data, game]);
+  useEffect(() => {
+    if (data?.mode !== "summary") return;
+    const key = `${data.game}:${view?.live?.hand ?? 0}:${data.gameOver ? "done" : "hand"}`;
+    if (summaryKey.current !== key) { summaryKey.current = key; setSticky(true); setScreen((s) => (s === "practice" ? s : "auto")); }
+  }, [data?.mode, data?.game, data?.gameOver, view?.live?.hand]);
   useEffect(() => { if (fatal?.status === 401) router.replace(`/watch?code=${encodeURIComponent(cls)}`); }, [fatal, cls, router]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3200); return () => clearTimeout(t); }, [toast]);
 
@@ -160,10 +174,10 @@ export function WatchApp({ cls }: { cls: string }) {
   }
 
   const mode = data?.mode;
-  const closed = !data?.session || data.session.status !== "live" || view?.status === "complete";
+  const closed = !data?.session || data.session.status !== "live";
   const g = myGroupOf(groups, data?.me.id || "");
   const showPractice = screen === "practice" && g && g.status[data!.me.id] === "accepted";
-  const showSummary = !showPractice && mode === "summary" && screen !== "table";
+  const showSummary = !showPractice && sticky && screen !== "table";
   const scores = view?.scores || {};
 
   const header = (
@@ -172,9 +186,10 @@ export function WatchApp({ cls }: { cls: string }) {
       <span className="t-app text-green-text whitespace-nowrap">Mahjong Together</span>
       <span className="h-6 w-px bg-line" aria-hidden />
       <span className="t-section whitespace-nowrap">Watching {cls}</span>
-      {mode === "live" && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D92D20] text-white px-2.5 h-7 t-sub font-semibold" aria-label="Live"><Radio size={14} /> LIVE</span>}
+      {mode === "live" && live && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D92D20] text-white px-2.5 h-7 t-sub font-semibold" aria-label="Live"><Radio size={14} /> LIVE</span>}
       <span className="inline-flex items-center gap-1.5 t-sub text-muted whitespace-nowrap" data-watching><Eye size={16} /> {data?.watching ?? "–"} watching</span>
       <span className="flex-1" />
+      {(data?.tables ?? 0) > 1 && game && <Btn variant="secondary" className="min-h-10 px-3 bg-card t-sub" onClick={() => { switchedAt.current = data; setGame(null); setPaused(null); setSticky(false); setScreen("auto"); }}>Switch Table</Btn>}
       {data && <span className="hidden xl:inline-flex items-center gap-2 t-sub text-muted"><VAvatar v={data.me} size={28} />{data.me.name}</span>}
       <button onClick={() => setHelp(true)} aria-label="Help" className="h-11 w-11 rounded-full flex items-center justify-center hover:bg-hover"><CircleHelp size={20} /></button>
       <ThemeToggle />
@@ -212,8 +227,13 @@ export function WatchApp({ cls }: { cls: string }) {
         ) : (
           <div className="spec-table h-full rounded-[28px] flex items-center justify-center">
             <div className="text-center text-white px-6">
-              <p className="text-[22px] leading-[30px] font-semibold">{view ? "Waiting for the Mahjong game to begin." : "Waiting for the Game to Start"}</p>
-              <p className="t-body text-white/85 mt-1">{view ? "The players are getting ready. The table appears when the first hand is dealt." : "Your classroom is ready. The live Mahjong table will appear when the players begin."}</p>
+              {stale ? <>
+                <p className="text-[24px] leading-[32px] font-semibold">Connection interrupted. Reconnecting…</p>
+                <p className="t-body text-white/85 mt-1">We can't reach the server right now. The table appears as soon as the connection is back.</p>
+              </> : <>
+                <p className="text-[24px] leading-[32px] font-semibold">Waiting for the Game to Start</p>
+                <p className="t-body text-white/85 mt-1">{view ? "The players are getting ready. The live table appears as soon as the first hand is dealt." : "Your classroom is ready. The live Mahjong table will appear when the players begin."}</p>
+              </>}
               {players.length > 0 && <div className="flex justify-center gap-3 mt-4">{players.map((p) => <span key={p.id} className="inline-flex items-center gap-1.5 rounded-full bg-black/25 px-3 h-10 t-sub"><span style={EMOJI_FONT}>{emojiFor(p)}</span>{p.name}</span>)}</div>}
             </div>
           </div>
@@ -257,55 +277,46 @@ export function WatchApp({ cls }: { cls: string }) {
   );
 
   return (
-    <>
-      {/* Spectator Mode is designed for laptops/desktops. */}
-      <div data-wide className="min-[1000px]:hidden min-h-[100dvh] flex flex-col items-center justify-center text-center px-6 gap-3 bg-page" data-desktop-only>
-        <Eye size={36} className="text-green-text" />
-        <h1 className="t-app text-green-text">Watch on a Bigger Screen</h1>
-        <p className="t-body text-muted max-w-[340px]">For the best learning experience, open Mahjong Together on a laptop or desktop.</p>
-        <Btn variant="secondary" className="mt-2 bg-card" onClick={() => router.push("/")}>Back to Home</Btn>
-      </div>
-      <div data-wide className="max-[999px]:hidden h-[100dvh] flex flex-col bg-page overflow-hidden" data-watch-app>
-        {header}
-        {stale && <div className="shrink-0 mx-auto mb-2 rounded-full bg-[#FEF3C7] text-[#7A4B00] dark:bg-[#3a2e0b] dark:text-[#FCD34D] px-4 py-1.5 t-sub" role="status">Connection interrupted. Reconnecting… The view may be out of date.</div>}
-        <main className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto px-4 pb-4">
-          {!data ? <Centered title="Joining the classroom…" />
-            : showPractice ? <PracticeRoom group={g!} practice={practice} people={people} me={data.me.id} act={act} onBack={() => setScreen("auto")} />
-            : showSummary ? <Summary disc={disc} groups={groups} people={people} me={data.me.id} act={act} openPractice={() => setScreen("practice")} gameOver={view?.status === "complete"} keepWatching={view?.live ? () => setScreen("table") : undefined} />
-            : mode === "select" ? (
-              <Centered title="Choose a Live Game" text="Several teaching games are live in this classroom. Pick one to watch.">
-                <div className="grid grid-cols-2 gap-3 mt-4 w-full max-w-[760px]">
-                  {(data.games || []).map((gm) => (
-                    <button key={gm.code} onClick={() => setGame(gm.code)} className="rounded-[18px] border border-line bg-card p-4 text-left hover:bg-hover flex flex-col gap-2">
-                      <span className="t-section">{gm.name} · {gm.code}</span>
-                      <span className="flex gap-2">{gm.players.map((p, k) => <span key={k} className="inline-flex items-center gap-1 t-sub"><span style={EMOJI_FONT}>{emojiFor(p)}</span>{p.name}</span>)}</span>
-                      <span className="t-sub text-muted">{gm.hand ? `Hand ${gm.hand} in progress` : "Getting ready"}</span>
-                    </button>
-                  ))}
-                </div>
-              </Centered>
-            ) : (
-              <div className="h-full grid gap-4" style={{ gridTemplateColumns: "minmax(0,1.9fr) minmax(340px,1fr)" }}>
-                {tableColumn}
-                {data.session ? (
-                  <DiscussionPanel disc={disc} people={people} me={data.me.id} act={act} selRef={selRef} clearRef={() => setSelRef(null)}
-                    onRef={(r) => (r.game === data.game ? inspect(r.seq) : setToast("This move is from another game."))} closed={closed}
-                    snapFor={selRef ? snaps[selRef.seq] || null : paused?.snap || null} names={names} draft={draft} setDraft={setDraft}
-                    pausedRef={paused ? refOf(paused.event) : null} setRef={setSelRef} />
-                ) : (
-                  <section className="rounded-[22px] border border-line bg-card p-6 flex flex-col justify-center text-center gap-2" aria-label="Live Discussion">
-                    <h2 className="t-page">Live Discussion</h2>
-                    <p className="t-body text-muted">The discussion opens when your instructor starts the observation session.</p>
-                  </section>
-                )}
+    <div data-wide className="h-[100dvh] flex flex-col bg-page overflow-hidden" data-watch-app>
+      {header}
+      {stale && <div className="shrink-0 mx-auto mb-2 rounded-full bg-[#FEF3C7] text-[#7A4B00] dark:bg-[#3a2e0b] dark:text-[#FCD34D] px-4 py-1.5 t-sub" role="status">Connection interrupted. Reconnecting… The view may be out of date.</div>}
+      <main className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto px-4 pb-4">
+        {!data ? <Centered title="Joining the classroom…" />
+          : showPractice ? <PracticeRoom group={g!} practice={practice} people={people} me={data.me.id} act={act} onBack={() => setScreen("auto")} />
+          : showSummary ? <Summary disc={disc} groups={groups} people={people} me={data.me.id} act={act} openPractice={() => setScreen("practice")} gameOver={!!data.gameOver}
+              backToTable={() => { setSticky(false); setScreen("table"); }} liveAgain={mode === "live"} />
+          : mode === "select" && !game ? (
+            <Centered title="Choose a Table to Watch" text="Several tables are playing in this classroom. Pick one to watch.">
+              <div className="grid grid-cols-2 gap-4 mt-5 w-full max-w-[880px]" data-tables>
+                {(data.games || []).map((gm) => (
+                  <div key={gm.code} className="rounded-[20px] border border-line bg-card p-5 text-left flex flex-col gap-3">
+                    <div className="flex items-center"><span className="t-section flex-1">Table {gm.code}</span><span className="t-sub text-muted">{gm.status}</span></div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">{gm.players.map((p, k) => <span key={k} className="inline-flex items-center gap-1.5 t-body min-w-0"><span style={EMOJI_FONT}>{emojiFor(p)}</span><span className="truncate">{p.name}</span></span>)}</div>
+                    <Btn className="self-start min-w-[140px]" onClick={() => setGame(gm.code)}>Watch</Btn>
+                  </div>
+                ))}
               </div>
-            )}
-          {screen === "table" && mode === "summary" && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40"><Btn onClick={() => setScreen("auto")}>Back to Summary</Btn></div>}
-        </main>
-        {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-full bg-ink text-bg px-4 py-2.5 t-sub shadow-sheet mt-pop" role="status">{toast}</div>}
-        {help && <HelpModal onClose={() => setHelp(false)} />}
-      </div>
-    </>
+            </Centered>
+          ) : (
+            <div className="h-full grid gap-4" style={{ gridTemplateColumns: "minmax(0,1.9fr) minmax(340px,1fr)" }}>
+              {tableColumn}
+              {data.session ? (
+                <DiscussionPanel disc={disc} people={people} me={data.me.id} act={act} selRef={selRef} clearRef={() => setSelRef(null)}
+                  onRef={(r) => (r.game === data.game ? inspect(r.seq) : setToast("This move is from another game."))} closed={closed}
+                  snapFor={selRef ? snaps[selRef.seq] || null : paused?.snap || null} names={names} draft={draft} setDraft={setDraft}
+                  pausedRef={paused ? refOf(paused.event) : null} setRef={setSelRef} />
+              ) : (
+                <section className="rounded-[22px] border border-line bg-card p-6 flex flex-col justify-center text-center gap-2" aria-label="Live Discussion">
+                  <h2 className="t-page">Live Discussion</h2>
+                  <p className="t-body text-muted">Live Discussion opens automatically as soon as a table starts in this classroom.</p>
+                </section>
+              )}
+            </div>
+          )}
+        {screen === "table" && mode === "summary" && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40"><Btn onClick={() => { setSticky(true); setScreen("auto"); }}>Back to Summary</Btn></div>}
+      </main>
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-full bg-ink text-bg px-4 py-2.5 t-sub shadow-sheet mt-pop" role="status">{toast}</div>}
+      {help && <HelpModal onClose={() => setHelp(false)} />}
+    </div>
   );
 }
-

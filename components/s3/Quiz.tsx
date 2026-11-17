@@ -86,23 +86,23 @@ export function Quiz({ stepId, onDone, onClose }: { stepId: string; onDone: (res
   const correctOpt = q.options.find((o) => o.id === q.correct)!;
   const visual = (o: Opt) => (o.tiles ? <TileRow tiles={o.tiles} /> : o.wall ? <WallMini {...o.wall} /> : null);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal aria-label="Test My Knowledge">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal aria-label="Test My Knowledge">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-[430px] max-h-[90dvh] overflow-y-auto bg-bg rounded-t-[20px] shadow-sheet px-4 pt-4 pb-safe flex flex-col gap-4">
+      <div className="relative w-full max-w-[900px] max-h-[90dvh] overflow-y-auto bg-card rounded-[24px] shadow-sheet p-8 flex flex-col gap-5">
         <div className="flex items-start gap-2">
-          <h2 className="t-page text-green-text flex-1">{q.q}</h2>
+          <h2 className="text-[24px] leading-[32px] font-semibold text-green-text flex-1">{q.q}</h2>
           <button onClick={onClose} aria-label="Close" className="h-10 w-10 -mr-2 rounded-full flex items-center justify-center hover:bg-surface"><X size={20} /></button>
         </div>
-        <div className="grid grid-cols-1 gap-2" role="radiogroup">
+        <div className="grid grid-cols-3 gap-4" role="radiogroup">
           {q.options.map((o) => {
             const chosen = pick === o.id;
             return (
               <button key={o.id} type="button" role="radio" aria-checked={chosen} disabled={answered && right}
                 onClick={() => setPick(o.id)}
-                className={cx("w-full rounded-[16px] border p-3 flex items-center gap-3 text-left bg-card",
+                className={cx("w-full rounded-[18px] border p-5 flex flex-col items-center gap-3 text-center bg-card hover:bg-hover min-h-[180px] justify-center",
                   answered && chosen ? (right ? "border-green border-[1.5px] bg-green-soft" : "border-[#D92D20] border-[1.5px]") : "border-line")}>
-                <span className="shrink-0 min-w-[110px] flex justify-center">{visual(o)}</span>
-                <span className="t-sub font-medium flex-1">{o.label}</span>
+                <span className="flex justify-center scale-125 origin-center py-2">{visual(o)}</span>
+                <span className="t-body font-medium">{o.label}</span>
               </button>
             );
           })}
@@ -114,18 +114,18 @@ export function Quiz({ stepId, onDone, onClose }: { stepId: string; onDone: (res
         )}
         {answered && !right && (
           <div className="rounded-[14px] bg-surface p-3 flex flex-col gap-2" role="status">
-            <span className="t-section">Not quite. Here&apos;s why.</span>
+            <span className="t-section">Not Quite. Here&apos;s Why.</span>
             <p className="t-sub">{q.why}</p>
             <div className="flex items-center gap-3 pt-1"><span className="t-meta text-muted">Correct:</span>{visual(correctOpt)}<span className="t-meta text-muted">{correctOpt.label}</span></div>
           </div>
         )}
-        <div className="flex flex-col gap-2 mb-3">
-          {answered && right && <Btn onClick={() => onDone("correct")}>Continue</Btn>}
+        <div className="flex items-center gap-3 justify-end">
+          {!answered && <p className="t-sub text-muted mr-auto">Choose one answer. Only you can see your result.</p>}
+          {answered && right && <Btn className="min-w-[180px]" onClick={() => onDone("correct")}>Continue</Btn>}
           {answered && !right && <>
-            <Btn onClick={() => setPick(null)}>Try Again</Btn>
-            <Btn variant="secondary" onClick={() => onDone("skipped")}>Skip for Now</Btn>
+            <Btn variant="secondary" className="min-w-[160px] bg-card" onClick={() => onDone("skipped")}>Skip for Now</Btn>
+            <Btn className="min-w-[160px]" onClick={() => setPick(null)}>Try Again</Btn>
           </>}
-          {!answered && <p className="t-meta text-muted text-center">Choose one answer. Only you can see your result.</p>}
         </div>
       </div>
     </div>

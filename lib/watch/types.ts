@@ -86,7 +86,7 @@ export interface Group {
   status: Record<string, "invited" | "accepted" | "declined">;
   createdAt: number;
 }
-export interface Groups { v: number; computedAt: number | null; groups: Group[]; assign: Record<string, string> } // assign: spectator → accepted group
+export interface Groups { v: number; computedAt: number | null; groups: Group[]; assign: Record<string, string>; basis?: string } // assign: spectator → accepted group
 
 export interface PracticeMsg { id: string; sid: string; kind: "text" | "emoji"; text: string; ts: number }
 export interface Practice { v: number; group: string; idx: number; stage: "answer" | "reveal"; answers: Record<string, string>; chat: PracticeMsg[]; round: number }
