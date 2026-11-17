@@ -12,30 +12,10 @@ import { EMOJI_FONT, emojiFor } from "@/components/s3/avatar";
 import { SpecTable, WTile, type Highlight, type TableModel } from "./SpecTable";
 import { DiscussionPanel, VAvatar } from "./Discussion";
 import { PracticeRoom, Summary, myGroupOf } from "./Learn";
+import { Guide, Intro } from "./Basics";
 import { useWatch } from "./useWatch";
 
 const SHORT: Record<string, string> = { discard: "Discard", pung: "Pung", kong: "Kong", hu: "Hu", deal: "New hand", exchange: "Exchange", dingque: "Ding Que", end: "Hand over", draw: "Draw" };
-
-function HelpModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal aria-label="How Spectating Works">
-      <div className="absolute inset-0 bg-black/35" onClick={onClose} />
-      <div className="relative w-full max-w-[520px] rounded-[22px] bg-card shadow-sheet p-6 flex flex-col gap-3 mt-pop">
-        <div className="flex items-center"><h2 className="t-page flex-1">How Spectating Works</h2>
-          <button onClick={onClose} aria-label="Close" className="h-11 w-11 -mr-2 rounded-full flex items-center justify-center hover:bg-hover"><X size={20} /></button></div>
-        <ul className="flex flex-col gap-2 t-body list-disc pl-5">
-          <li><b>Switch perspectives</b> to put any player at the bottom. All four hands stay visible.</li>
-          <li><b>Click a discarded tile</b> or a move in the move list to pause <i>your</i> view at that moment. The real game keeps going; the players are never interrupted.</li>
-          <li><b>Ask About This Move</b> to post a question linked to that move. Others can reply or tap <b>+1 Same Question</b>.</li>
-          <li><b>Ask Private Coach</b> for free rule explanations. Only you see those, unless you choose to share.</li>
-          <li>Players never see spectator questions or reactions.</li>
-        </ul>
-        <Btn onClick={onClose}>Got It</Btn>
-      </div>
-    </div>
-  );
-}
 
 function Centered({ title, text, children }: { title: string; text?: string; children?: React.ReactNode }) {
   return (
@@ -62,6 +42,7 @@ export function WatchApp({ cls }: { cls: string }) {
   const [draft, setDraft] = useState({ text: "", focus: 0 });
   const [toast, setToast] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
   const [screen, setScreen] = useState<"auto" | "practice" | "table">("auto");
   // The summary appears automatically when the watched hand / game ends and stays until the viewer leaves it.
   const [sticky, setSticky] = useState(false);
@@ -96,7 +77,7 @@ export function WatchApp({ cls }: { cls: string }) {
 
   const refOf = useCallback((e: SpecEvent): QRef => {
     const p = players.find((x) => x.id === e.actor);
-    return { seq: e.seq, game: e.game, hand: e.hand, type: e.type, actor: e.actor, actorName: p?.name, actorAvatar: p?.avatar, actorKind: p?.kind, tile: e.tile, text: e.text, ts: e.ts, rule: e.rule };
+    return { seq: e.seq, game: e.game, hand: e.hand, type: e.type, actor: e.actor, actorName: p?.name, actorAvatar: p?.avatar, actorKind: p?.kind, tile: e.tile, text: e.text, ts: e.ts, rule: e.rule, from: e.from };
   }, [players]);
 
   const inspect = useCallback(async (seq: number) => {
@@ -285,7 +266,8 @@ export function WatchApp({ cls }: { cls: string }) {
       {stale && <div className="shrink-0 mx-auto mb-2 rounded-full bg-[#FEF3C7] text-[#7A4B00] dark:bg-[#3a2e0b] dark:text-[#FCD34D] px-4 py-1.5 t-sub" role="status">Connection interrupted. Reconnecting… The view may be out of date.</div>}
       <main className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto px-4 pb-4">
         {!data ? <Centered title="Joining the classroom…" />
-          : showPractice ? <PracticeRoom group={g!} practice={practice} people={people} me={data.me.id} act={act} onBack={() => setScreen("auto")} cls={cls} game={data.game} />
+          : !data.intro && !introDone ? <Intro onDone={() => { setIntroDone(true); act({ type: "intro-done" }).catch(() => {}); }} />
+          : showPractice ? <PracticeRoom group={g!} practice={practice} people={people} me={data.me.id} act={act} onBack={() => setScreen("auto")} cls={cls} game={data.game} players={players} />
           : showSummary ? <Summary disc={disc} groups={groups} people={people} me={data.me.id} act={act} openPractice={() => setScreen("practice")} gameOver={!!data.gameOver}
               backToTable={() => { setSticky(false); setScreen("table"); }} liveAgain={mode === "live"} />
           : mode === "select" && !game ? (
@@ -319,7 +301,7 @@ export function WatchApp({ cls }: { cls: string }) {
         {screen === "table" && mode === "summary" && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40"><Btn onClick={() => { setSticky(true); setScreen("auto"); }}>Back to Summary</Btn></div>}
       </main>
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-full bg-ink text-bg px-4 py-2.5 t-sub shadow-sheet mt-pop" role="status">{toast}</div>}
-      {help && <HelpModal onClose={() => setHelp(false)} />}
+      {help && <Guide onClose={() => setHelp(false)} />}
     </div>
   );
 }

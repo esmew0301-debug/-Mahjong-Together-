@@ -8,10 +8,10 @@ import { cx } from "@/components/ui";
 import { EMOJI_FONT, emojiFor } from "@/components/s3/avatar";
 
 /** One tile; width is a CSS length (tile sizes derive from the table's --t unit). Tile faces are never rotated. */
-export function WTile({ id, w, back, dim, hl, isNew, onClick, label, ring }: { id?: number; w: string; back?: boolean; dim?: boolean; hl?: boolean; isNew?: boolean; onClick?: () => void; label?: string; ring?: boolean }) {
+export function WTile({ id, w, back, dim, hl, isNew, onClick, label, ring, red }: { id?: number; w: string; back?: boolean; dim?: boolean; hl?: boolean; isNew?: boolean; onClick?: () => void; label?: string; ring?: boolean; red?: boolean }) {
   const face = back || id === undefined ? "back" : { s: suitOf(id), n: numOf(id) };
   const svg = <svg viewBox="-17 -22 34 50" style={{ width: "100%", height: "auto", display: "block" }} aria-hidden><g dangerouslySetInnerHTML={{ __html: tileArt(face as never) }} /></svg>;
-  const cls = cx("relative shrink-0 block rounded-[5px]", dim && !hl && "spec-dim", hl && "spec-hl", isNew && "spec-new spec-last", ring && "outline-2 outline-dashed outline-white/80 outline-offset-1");
+  const cls = cx("relative shrink-0 block rounded-[5px]", dim && !hl && "spec-dim", hl && (red ? "spec-red" : "spec-hl"), isNew && "spec-new spec-last", ring && "outline-2 outline-dashed outline-white/80 outline-offset-1");
   if (!onClick) return <span className={cls} style={{ width: w }} title={label} data-hl={hl ? "" : undefined}>{svg}</span>;
   return (
     <button type="button" onClick={onClick} aria-label={label} title={label} data-hl={hl ? "" : undefined} style={{ width: w }}
@@ -55,13 +55,13 @@ function Plate({ p, snap, pos, dim, scores }: { p: SpecPlayer; snap: TableModel;
   );
 }
 
-function Melds({ melds, w, dim, hl, onTile, names }: { melds: Meld[]; w: string; dim: boolean; hl: Set<number>; onTile?: (t: number) => void; names: Record<string, string> }) {
+function Melds({ melds, w, dim, hl, onTile, names, red }: { melds: Meld[]; w: string; dim: boolean; hl: Set<number>; onTile?: (t: number) => void; names: Record<string, string>; red?: boolean }) {
   if (!melds.length) return null;
   return (
     <div className="flex flex-wrap gap-1.5 justify-center">
       {melds.map((m, i) => (
         <span key={i} className="flex gap-[1px] rounded-[6px] bg-black/20 p-[2px]" aria-label={`${m.kind === "pung" ? "Pung" : "Kong"} of ${tileName(m.tiles[0])}${m.from ? ` from ${names[m.from] || "a player"}` : ""}`}>
-          {m.tiles.map((t) => <WTile key={t} id={m.kind === "ckong" ? t : t} w={w} dim={dim} hl={hl.has(t)} onClick={onTile && m.from ? () => onTile(t) : undefined} label={onTile && m.from ? `Inspect: Pung/Kong of ${tileName(t)}` : tileName(t)} />)}
+          {m.tiles.map((t) => <WTile key={t} id={m.kind === "ckong" ? t : t} w={w} dim={dim} hl={hl.has(t)} red={red} onClick={onTile && m.from ? () => onTile(t) : undefined} label={onTile && m.from ? `Inspect: Pung/Kong of ${tileName(t)}` : tileName(t)} />)}
         </span>
       ))}
     </div>
@@ -73,9 +73,9 @@ function Melds({ melds, w, dim, hl, onTile, names }: { melds: Meld[]; w: string;
  * relative seats (next turn = right). Changing perspective only moves seats (position-only layout animation), so
  * tile faces and labels stay upright and readable. All four hands are shown face up (authorized teaching mode).
  */
-export function SpecTable({ snap, players, persp, highlight, paused, newestTile, onDiscard, scores }: {
+export function SpecTable({ snap, players, persp, highlight, paused, newestTile, onDiscard, scores, red, statusText, unit }: {
   snap: TableModel; players: SpecPlayer[]; persp: string; highlight: Highlight | null; paused: boolean; newestTile?: number;
-  onDiscard?: (tile: number) => void; scores: Record<string, number>;
+  onDiscard?: (tile: number) => void; scores: Record<string, number>; red?: boolean; statusText?: string; unit?: string;
 }) {
   const reduce = useReducedMotion();
   const order = snap.order;
@@ -100,7 +100,7 @@ export function SpecTable({ snap, players, persp, highlight, paused, newestTile,
 
   return (
     <div className="spec-table relative h-full w-full rounded-[28px] p-[18px] grid gap-2 overflow-hidden" data-spec-table
-      style={{ gridTemplateColumns: `minmax(calc(${T} * 3.4 + 16px), auto) minmax(0,1fr) minmax(calc(${T} * 3.4 + 16px), auto)`, gridTemplateRows: "auto minmax(0,1fr) auto" }}>
+      style={{ ...(unit ? { ["--t" as string]: unit } : {}), gridTemplateColumns: `minmax(calc(${T} * 3.4 + 16px), auto) minmax(0,1fr) minmax(calc(${T} * 3.4 + 16px), auto)`, gridTemplateRows: "auto minmax(0,1fr) auto" }}>
       {order.map((pid) => {
         const pos = posOf[pid];
         const p = byId[pid] || { id: pid, name: "Player", seat: 0 };
@@ -115,9 +115,9 @@ export function SpecTable({ snap, players, persp, highlight, paused, newestTile,
             className={cx(place[pos], "min-w-0 min-h-0 flex", side ? "flex-col items-center justify-center gap-2" : "flex-col items-center gap-1.5")} data-seat={pos} data-pid={pid}>
             {pos !== "bottom" && <Plate p={p} snap={snap} pos={pos} dim={dim} scores={scores} />}
             <div className={cx(side ? "grid grid-cols-3 gap-[2px]" : "flex flex-wrap justify-center gap-[2px]")} aria-label={`${p.name}'s hand: ${hand.map(tileName).join(", ")}`}>
-              {hand.map((t) => <WTile key={t} id={t} w={w} dim={dim} hl={hl.has(t)} ring={ex.has(t)} label={tileName(t)} />)}
+              {hand.map((t) => <WTile key={t} id={t} w={w} dim={dim} hl={hl.has(t)} red={red} ring={ex.has(t)} label={tileName(t)} />)}
             </div>
-            <Melds melds={snap.melds[pid] || []} w={mw} dim={dim} hl={hl} names={names} onTile={onDiscard} />
+            <Melds melds={snap.melds[pid] || []} w={mw} dim={dim} hl={hl} names={names} onTile={onDiscard} red={red} />
             {pos === "bottom" && <Plate p={p} snap={snap} pos={pos} dim={dim} scores={scores} />}
           </motion.section>
         );
@@ -133,7 +133,7 @@ export function SpecTable({ snap, players, persp, highlight, paused, newestTile,
             <motion.div key={`pile-${pid}`} layout={layout} transition={transition} className={cx(pile[pos], "flex min-w-0")} data-pile={pos}>
               <div className={cx("flex flex-wrap gap-[3px] content-start", (pos === "top" || pos === "left") && "flex-wrap-reverse")} style={{ maxWidth: `calc((${T} * 0.92 + 3px) * ${per})` }}
                 aria-label={`${names[pid]}'s discards`}>
-                {ds.map((t) => <WTile key={t} id={t} w={`calc(${T} * 0.92)`} dim={dim} hl={hl.has(t)} isNew={t === newestTile && !paused}
+                {ds.map((t) => <WTile key={t} id={t} w={`calc(${T} * 0.92)`} dim={dim} hl={hl.has(t)} red={red} isNew={t === newestTile && !paused}
                   onClick={onDiscard ? () => onDiscard(t) : undefined} label={`Inspect: ${names[pid]} discarded ${tileName(t)}`} />)}
               </div>
             </motion.div>
@@ -141,7 +141,7 @@ export function SpecTable({ snap, players, persp, highlight, paused, newestTile,
         })}
         <div className="col-start-2 row-start-2 self-center justify-self-center rounded-[14px] bg-black/25 text-white px-3.5 py-2 text-center min-w-[148px]" data-status>
           <p className="text-[14px] leading-[20px] text-white/80">Hand {snap.hand} · Wall {snap.wallCount}</p>
-          <p className="text-[15px] leading-[22px] font-semibold">{paused ? "Paused on this move" : status}</p>
+          <p className="text-[15px] leading-[22px] font-semibold">{statusText || (paused ? "Paused on this move" : status)}</p>
         </div>
       </div>
     </div>

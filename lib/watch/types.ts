@@ -57,7 +57,7 @@ export interface SpecView {
 
 export type Topic = "tile" | "discard" | "dingque" | "exchange" | "pung" | "kong" | "hu" | "scoring" | "turn" | "general";
 
-export interface QRef { seq: number; game: string; hand: number; type: SpecEventType; actor?: string; actorName?: string; actorAvatar?: string; actorKind?: string; tile?: number; text: string; ts: number; rule?: string }
+export interface QRef { seq: number; game: string; hand: number; type: SpecEventType; actor?: string; actorName?: string; actorAvatar?: string; actorKind?: string; tile?: number; text: string; ts: number; rule?: string; from?: string }
 export interface QReply { id: string; author: string; text: string; ts: number }
 export interface Question {
   id: string;
@@ -88,12 +88,15 @@ export interface Group {
 }
 export interface Groups { v: number; computedAt: number | null; groups: Group[]; assign: Record<string, string>; basis?: string } // assign: spectator → accepted group
 
-export interface PracticeMsg { id: string; sid: string; kind: "text" | "emoji"; text: string; ts: number }
-/** One learner's own progress through the group's five questions (independent of everyone else). */
-export interface LearnerProgress { idx: number; answers: Record<string, string>; done: boolean; decision?: "yes" | "no" }
+export interface PracticeMsg { id: string; sid: string; kind: "text" | "emoji"; text: string; ts: number; moment?: number }
+/** One learner's own state in the group: their "Play a Game Together" decision. */
+export interface LearnerProgress { decision?: "yes" | "no" }
+/** A real moment of the watched game that the group asked about (snapshot copied at creation: durable). */
+export interface PracticeMoment { qid: string; seq: number; game: string; ref: QRef; topic: Topic; question: string; snap: SpecSnap }
 /** "Play a Game Together": one opt-in attempt of a learning group → one fresh Mahjong room. */
 export interface GameAttempt { id: string; startedAt: number; deadline: number; members: string[]; declined: string[]; room?: string; formedAt?: number;
   creds?: Record<string, { pid: string; token: string }> /* SERVER-ONLY: stripped before sending */ }
-export interface Practice { v: number; group: string; set: string[]; users: Record<string, LearnerProgress>; chat: PracticeMsg[]; games: GameAttempt[] }
+/** Group-wide discussion of up to 4 real moments; everyone active confirms "I Understand" before the group moves on. */
+export interface Practice { v: number; group: string; moments: PracticeMoment[]; cur: number; ready: string[]; users: Record<string, LearnerProgress>; chat: PracticeMsg[]; games: GameAttempt[] }
 
 export interface GameSummary { code: string; name: string; status: string; players: { name: string; avatar?: string; kind?: string }[]; hand: number | null; teaching: boolean; featured: boolean; classroom?: string; createdAt: number }

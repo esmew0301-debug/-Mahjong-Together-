@@ -7,7 +7,10 @@ import type { Discussion, Group, Topic } from "./types";
 
 export function interestProfiles(d: Discussion): Record<string, Topic[]> {
   const sets: Record<string, Set<Topic>> = {};
-  for (const q of d.questions) for (const sid of q.same) (sets[sid] ||= new Set()).add(q.topic); // same[] includes the author
+  for (const q of d.questions) {
+    for (const sid of q.same) (sets[sid] ||= new Set()).add(q.topic); // same[] includes the author
+    for (const r of q.replies) (sets[r.author] ||= new Set()).add(q.topic); // replying to a question is participation too
+  }
   return Object.fromEntries(Object.entries(sets).map(([k, v]) => [k, [...v].sort()]));
 }
 export const jaccard = (a: Topic[], b: Topic[]) => {
@@ -29,7 +32,7 @@ function sharedQuestionCount(d: Discussion) {
 /**
  * Greedy grouping into groups of four (three as a fallback) whose members ALL share at least one topic.
  * Seeds are the most active viewers; candidates are ranked by shared questions, then topic overlap. Deterministic:
- * ties break by spectator id. Viewers who cannot be placed with evidence are left for the general beginner group.
+ * ties break by spectator id. Viewers who cannot be placed with evidence are left for the general shared-questions group.
  */
 export function recommendGroups(d: Discussion, eligible: string[], now = Date.now(), newId: () => string): Group[] {
   const prof = interestProfiles(d);
@@ -50,7 +53,10 @@ export function recommendGroups(d: Discussion, eligible: string[], now = Date.no
       }
       if (g.length === size) {
         g.forEach((m) => used.add(m));
-        groups.push({ id: newId(), kind: "topic", members: g, topics: shared(g, prof), status: Object.fromEntries(g.map((m) => [m, "invited"])), createdAt: now });
+        // the group's main topic first: the one most of ITS real questions are about (headline + group name)
+        const n = (t: Topic) => d.questions.filter((q) => q.topic === t && [...q.same, ...q.replies.map((r) => r.author)].some((x) => g.includes(x))).length;
+        const topics = shared(g, prof).sort((x, y) => n(y) - n(x) || (x < y ? -1 : 1));
+        groups.push({ id: newId(), kind: "topic", members: g, topics, status: Object.fromEntries(g.map((m) => [m, "invited"])), createdAt: now });
       }
     }
   }

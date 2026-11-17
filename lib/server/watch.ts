@@ -7,10 +7,9 @@ import { INVALID_CLASSROOM } from "../classroom";
 import { loadSnap, snapshotOf } from "./feed";
 import { displayName } from "../names";
 import type { Room } from "../types";
-import type { Discussion, GameAttempt, GameSummary, Group, Groups, LearnerProgress, Practice, QRef, Question, Session, SpecView, Viewer } from "../watch/types";
+import type { Discussion, GameAttempt, GameSummary, Group, Groups, LearnerProgress, Practice, PracticeMoment, QRef, Question, Session, SpecView, Viewer } from "../watch/types";
 import { classify } from "../watch/topics";
 import { recommendGroups } from "../watch/groups";
-import { PRACTICE_LENGTH, practiceSet, scenarioById } from "../watch/scenarios";
 import { CLASSROOM_CODE } from "../classroom";
 import { CLASS_WINDOW_MS } from "./match";
 
@@ -61,7 +60,7 @@ export function requireClass(raw: unknown) {
 }
 
 // ---------------------------------------------------------------- spectator sessions
-interface SpecRec { id: string; name: string; avatar: string; sh: string; joinedAt: number }
+interface SpecRec { id: string; name: string; avatar: string; sh: string; joinedAt: number; intro?: boolean }
 async function specMap(c: string): Promise<Record<string, SpecRec>> {
   const h = await kv.hgetall(specKey(c));
   const o: Record<string, SpecRec> = {};
@@ -166,7 +165,7 @@ export async function watchState(c: string, me: SpecRec, p: WatchParams, readCoo
   const pres = await kv.hgetall(specPresKey(c));
   if (Date.now() - Number(pres[me.id] || 0) > 4000) await kv.hset(specPresKey(c), me.id, String(Date.now()), TTL); // cheap presence
   pres[me.id] = String(Date.now());
-  const base = { me: { id: me.id, name: me.name, avatar: me.avatar } as Viewer, classroom: c, watching: onlineCount(pres) };
+  const base = { me: { id: me.id, name: me.name, avatar: me.avatar } as Viewer, intro: !!me.intro, classroom: c, watching: onlineCount(pres) };
 
   // which table? the viewer's explicit choice; otherwise the only live table; otherwise let them choose
   let room: Room | null = null;
@@ -194,8 +193,9 @@ export async function watchState(c: string, me: SpecRec, p: WatchParams, readCoo
   if (myGroupId) {
     let pr = await readDoc<Practice>(pracKey(myGroupId));
     const grp = groups?.groups.find((x) => x.id === myGroupId);
-    if (pr && grp && (!Array.isArray(pr.set) || !pr.users || !pr.games)) pr = (await casDoc<Practice, void>(pracKey(grp.id), () => newPractice(grp), (d) => normPractice(d, grp))).doc; // old shared-index doc
-    if (pr && pr.v !== p.pv) practice = redactPractice(pr, me.id);
+    if (grp && (!pr || !Array.isArray(pr.moments))) pr = await ensurePractice(session.id, grp); // older docs: rebuilt from real moments
+    if (pr && grp) pr = await tryAdvance(pr, grp, pres);
+    if (pr && pr.v !== p.pv) practice = { ...redactPractice(pr, me.id), active: grp ? activeMembers(grp, pres) : undefined };
   }
   return {
     ...base, mode, game: room.code, session, gameOver: room.status === "complete",
@@ -222,7 +222,7 @@ export async function snapshotFor(c: string, game: string, seq: number, readCook
 }
 
 // ---------------------------------------------------------------- discussion
-const ACTS = ["ask", "reply", "same", "group-accept", "group-decline", "general-join", "group-leave", "prac-answer", "prac-next", "prac-decide", "prac-chat", "prac-emoji"];
+const ACTS = ["ask", "reply", "same", "intro-done", "group-accept", "group-decline", "general-join", "group-leave", "prac-understand", "prac-decide", "prac-chat", "prac-emoji"];
 const lastPost = new Map<string, number>(); // best-effort per-instance spam guard; the document check below is authoritative
 function liveSession(room: Room) {
   const s = sessionOf(room);
@@ -236,6 +236,7 @@ export async function spectatorAct(c: string, me: SpecRec, a: Record<string, unk
   if (!game) { const live = await classGames(c); if (live.length === 1) game = live[0].code; } // same rule as the poll
   const type = String(a.type);
   if (!ACTS.includes(type)) throw new HttpError(400, "Unknown action"); // spectators have no game actions at all
+  if (type === "intro-done") { await kv.hset(specKey(c), me.id, JSON.stringify({ ...me, intro: true }), TTL); return { ok: true }; }
   if (["ask", "reply", "same"].includes(type)) {
     const room = await teachingRoom(c, game);
     assertNotPlayer(room, readCookie);
@@ -253,7 +254,7 @@ export async function spectatorAct(c: string, me: SpecRec, a: Record<string, unk
           const ev = (room.feed || []).find((e) => e.seq === Number(a.seq));
           if (!ev) throw new HttpError(404, "This move is no longer available for replay.");
           const actor = room.players.find((pl) => pl.id === ev.actor);
-          ref = { seq: ev.seq, game: ev.game, hand: ev.hand, type: ev.type, actor: ev.actor, actorName: actor ? displayName(actor.name) : undefined, actorAvatar: actor?.avatar, actorKind: actor?.kind, tile: ev.tile, text: ev.text, ts: ev.ts, rule: ev.rule };
+          ref = { seq: ev.seq, game: ev.game, hand: ev.hand, type: ev.type, actor: ev.actor, actorName: actor ? displayName(actor.name) : undefined, actorAvatar: actor?.avatar, actorKind: actor?.kind, tile: ev.tile, text: ev.text, ts: ev.ts, rule: ev.rule, from: ev.from };
           missingSuit = ev.rule === "missing-suit";
         }
         const q: Question = { id: `q-${uid()}`, classroom: c, game, session: s.id, ref, author: me.id, text, topic: classify(text, ref ? { ...ref, missingSuit } : null), ts: Date.now(), same: [me.id], replies: [] };
@@ -283,13 +284,13 @@ export async function spectatorAct(c: string, me: SpecRec, a: Record<string, unk
   }
   const room = await teachingRoom(c, game);
   assertNotPlayer(room, readCookie);
-  return groupAct(sessionOf(room), me, type, a);
+  return groupAct(c, sessionOf(room), me, type, a);
 }
 
 // ---------------------------------------------------------------- groups & practice
 const acceptedOf = (g: Group) => g.members.filter((m) => g.status[m] === "accepted");
 
-async function groupAct(s: Session, me: SpecRec, type: string, a: Record<string, unknown>) {
+async function groupAct(c: string, s: Session, me: SpecRec, type: string, a: Record<string, unknown>) {
   const init = (): Groups => ({ v: 0, computedAt: null, groups: [], assign: {} });
   if (type === "group-accept" || type === "group-decline" || type === "general-join" || type === "group-leave") {
     const { doc, out } = await casDoc<Groups, string | null>(groupsKey(s.id), init, (d) => {
@@ -314,27 +315,21 @@ async function groupAct(s: Session, me: SpecRec, type: string, a: Record<string,
       return null;
     });
     const joined = out ? doc.groups.find((x) => x.id === out) : null;
-    if (joined) await casDoc<Practice, void>(pracKey(joined.id), () => newPractice(joined), (pr) => normPractice(pr, joined));
+    if (joined) await ensurePractice(s.id, joined);
     return doc;
   }
-  // practice actions: only accepted members of the viewer's own group; progress is PER LEARNER
+  // shared practice: one current moment for the whole group; "I Understand" per member; per-member game decision
   const g = await myGroup(s, me);
-  const { doc } = await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g), (pr) => {
-    normPractice(pr, g);
-    const u: LearnerProgress = (pr.users[me.id] ||= { idx: 0, answers: {}, done: false });
-    const cur = pr.set[u.idx];
-    if (type === "prac-answer") {
-      if (u.done || String(a.qid) !== cur || u.answers[cur]) return; // stale / repeated submit: the first answer stands
-      const sc = scenarioById(cur)!;
-      const choice = String(a.choice);
-      if (!sc.options.some((o) => o.id === choice)) throw new HttpError(400, "Choose one of the answers.");
-      u.answers[cur] = choice;
-    } else if (type === "prac-next") {
-      if (u.done || String(a.qid) !== cur || !u.answers[cur]) return; // a double tap never skips a question
-      if (u.idx < PRACTICE_LENGTH - 1) u.idx += 1;
-      else u.done = true;
+  await ensurePractice(s.id, g);
+  const pres = await kv.hgetall(specPresKey(c));
+  const { doc } = await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g, []), (pr) => {
+    const u: LearnerProgress = (pr.users[me.id] ||= {});
+    if (type === "prac-understand") {
+      if (practiceDone(pr) || Number(a.moment) !== pr.cur) return; // stale / repeated click
+      if (!pr.ready.includes(me.id)) pr.ready.push(me.id);
+      advance(pr, g, pres, me.id);
     } else if (type === "prac-decide") {
-      if (!u.done) throw new HttpError(409, "Finish the five questions first.");
+      if (!practiceDone(pr)) throw new HttpError(409, "Finish the group discussion first.");
       const choice = a.choice === "yes" ? "yes" : "no";
       const waiting = pr.games.find((x) => !x.room);
       if (choice === "no") {
@@ -354,7 +349,7 @@ async function groupAct(s: Session, me: SpecRec, type: string, a: Record<string,
       if (!text) throw new HttpError(400, "Type a message.");
       const mine = [...pr.chat].reverse().find((x) => x.sid === me.id);
       if (mine && Date.now() - mine.ts < 800) throw new HttpError(429, "One moment — you just sent a message.");
-      pr.chat = [...pr.chat, { id: uid(), sid: me.id, kind: (type === "prac-emoji" ? "emoji" : "text") as "emoji" | "text", text, ts: Date.now() }].slice(-80);
+      pr.chat = [...pr.chat, { id: uid(), sid: me.id, kind: (type === "prac-emoji" ? "emoji" : "text") as "emoji" | "text", text, ts: Date.now(), moment: pr.cur }].slice(-120);
     } else throw new HttpError(400, "Unknown action");
   });
   return redactPractice(doc, me.id);
@@ -366,19 +361,71 @@ async function myGroup(s: Session, me: SpecRec) {
   if (!g || g.status[me.id] !== "accepted") throw new HttpError(403, "Join a learning group to practice together.");
   return g;
 }
-const newPractice = (g: Group): Practice => ({ v: 0, group: g.id, set: practiceSet(g.topics), users: {}, chat: [], games: [] });
-/** Migrate an older shared-index document (one group-wide counter cycling through 4 scenarios) to per-learner progress. */
-function normPractice(pr: Practice, g: Group) {
-  const old = pr as unknown as Record<string, unknown>;
-  if (!Array.isArray(pr.set) || pr.set.length !== PRACTICE_LENGTH) { pr.set = practiceSet(g.topics); pr.users = {}; }
-  for (const k of ["idx", "stage", "answers", "round"]) delete old[k];
-  pr.users ||= {}; pr.chat ||= []; pr.games ||= [];
+export const MAX_MOMENTS = 4;
+const newPractice = (g: Group, moments: PracticeMoment[]): Practice => ({ v: 0, group: g.id, moments, cur: 0, ready: [], users: {}, chat: [], games: [] });
+const practiceDone = (pr: Practice) => pr.cur >= pr.moments.length;
+const ACTIVE_MS = 20_000;
+/** Members who count for "everyone's ready": accepted, still connected (seen in the last 20 s). Never auto-approves anyone. */
+function activeMembers(g: Group, pres: Record<string, string>, also?: string) {
+  const now = Date.now();
+  return g.members.filter((m) => g.status[m] === "accepted" && (m === also || now - Number(pres[m] || 0) < ACTIVE_MS));
+}
+function advance(pr: Practice, g: Group, pres: Record<string, string>, also?: string) {
+  if (practiceDone(pr) || !pr.ready.length) return false;
+  const act = activeMembers(g, pres, also);
+  if (!act.length || !act.every((m) => pr.ready.includes(m))) return false;
+  pr.cur += 1; pr.ready = [];
+  return true;
+}
+/** A member disconnected after the others confirmed: move the group on (checked on every poll). */
+async function tryAdvance(pr: Practice, g: Group, pres: Record<string, string>) {
+  const probe = structuredClone(pr);
+  if (!advance(probe, g, pres)) return pr;
+  return (await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g, []), (d) => { advance(d, g, pres); })).doc;
 }
 
-/** Other learners' answers are never sent; the server-only room credentials are always stripped. */
+/**
+ * Pick up to 4 REAL moments for the group from its own public questions tied to recorded moves: relevant topics
+ * first, one per contributing member where possible, one entry per move, only moves whose recorded all-hands
+ * snapshot still exists (copied into the practice document so the discussion survives the game). Nothing invented.
+ */
+async function selectMoments(sessionId: string, g: Group): Promise<PracticeMoment[]> {
+  const disc = (await readDoc<Discussion>(discKey(sessionId))) || { v: 0, questions: [] };
+  const members = new Set(g.members);
+  const contributor = (q: Question) => (members.has(q.author) ? q.author : [...q.same, ...q.replies.map((r) => r.author)].find((m) => members.has(m)));
+  const cands = disc.questions.filter((q) => q.ref && contributor(q))
+    .sort((x, y) => Number(!g.topics.includes(x.topic)) - Number(!g.topics.includes(y.topic)) || y.same.length - x.same.length || x.ts - y.ts);
+  const order: Question[] = [];
+  const pool = [...cands];
+  for (let round = 0; round < 4 && pool.length; round++)
+    for (const m of g.members) { const i = pool.findIndex((q) => contributor(q) === m && !order.some((o) => o.ref!.seq === q.ref!.seq && o.ref!.game === q.ref!.game)); if (i >= 0) order.push(...pool.splice(i, 1)); }
+  for (const q of pool) if (!order.some((o) => o.ref!.seq === q.ref!.seq && o.ref!.game === q.ref!.game)) order.push(q);
+  const out: PracticeMoment[] = [];
+  for (const q of order) {
+    if (out.length >= MAX_MOMENTS) break;
+    const snap = await loadSnap(q.ref!.game, q.ref!.seq);
+    if (!snap) continue; // expired / never recorded: not shown (never reconstructed by guessing)
+    out.push({ qid: q.id, seq: q.ref!.seq, game: q.ref!.game, ref: q.ref!, topic: q.topic, question: q.text, snap });
+  }
+  return out.sort((x, y) => x.seq - y.seq);
+}
+async function ensurePractice(sessionId: string, g: Group) {
+  const cur = await readDoc<Practice>(pracKey(g.id));
+  if (cur && Array.isArray(cur.moments)) return cur;
+  const moments = await selectMoments(sessionId, g);
+  return (await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g, moments), (d) => {
+    if (Array.isArray(d.moments)) return;
+    const old = d as unknown as Record<string, unknown>;
+    for (const k of ["set", "idx", "stage", "answers", "round"]) delete old[k];
+    d.moments = moments; d.cur = 0; d.ready = [];
+    d.users = Object.fromEntries(Object.entries(d.users || {}).map(([k, v]) => [k, v.decision ? { decision: v.decision } : {}]));
+    d.chat ||= []; d.games ||= [];
+  })).doc;
+}
+
+/** The server-only room credentials are always stripped. */
 export function redactPractice(pr: Practice, me: string) {
-  const users = Object.fromEntries(Object.entries(pr.users || {}).map(([sid, u]) => [sid, sid === me ? u : { idx: u.idx, answers: {}, done: u.done, decision: u.decision }]));
-  return { ...pr, users, games: (pr.games || []).map(({ creds: _c, ...g }) => g) };
+  return { ...pr, games: (pr.games || []).map(({ creds: _c, ...g }) => g), me };
 }
 
 /** Is this waiting attempt ready to become a room? Four willing humans, everyone else decided, or the 25 s window ended. */
@@ -412,7 +459,7 @@ export async function gameStatus(c: string, me: SpecRec, a: Record<string, unkno
     const { room, creds } = await createMatchedRoom(members.map((m) => ({ name: people[m]?.name || "Learner", avatar: people[m]?.avatar })), CLASSROOM_CODE);
     let won = false;
     try {
-      await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g), (d) => {
+      await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g, []), (d) => {
         won = false;
         const cur = d.games.find((x) => x.id === att.id);
         if (!cur || cur.room || cur.members.join() !== members.join()) return; // someone else formed it, or membership changed

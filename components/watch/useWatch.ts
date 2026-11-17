@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/client";
 import type { Discussion, GameSummary, Groups, Practice, Session, SpecEvent, SpecView, Viewer } from "@/lib/watch/types";
 
-export type PracticeView = Practice;
+export type PracticeView = Practice & { active?: string[] };
 export interface WatchData {
   me: Viewer;
+  intro?: boolean;
   classroom: string;
   watching: number;
   mode: "waiting" | "select" | "live" | "summary";
@@ -38,7 +39,7 @@ export function useWatch(cls: string, game: string | null) {
   const gen = useRef(0); // bumps when the watched table changes; responses from an older table are ignored
 
   const acceptDisc = useCallback((d: Discussion) => { if (d.v >= v.current.dv) { v.current.dv = d.v; setDisc(d); } }, []);
-  const acceptPractice = useCallback((p: PracticeView) => { if (p.v >= v.current.pv) { v.current.pv = p.v; setPractice(p); } }, []);
+  const acceptPractice = useCallback((p: PracticeView) => { if (p.v >= v.current.pv) { v.current.pv = p.v; setPractice((old) => ({ ...p, active: p.active ?? old?.active })); } }, []);
 
   const poll = useCallback(async () => {
     const q = v.current;
@@ -63,7 +64,7 @@ export function useWatch(cls: string, game: string | null) {
     if (j.groups) { q.gv = j.groups.v; setGroups(j.groups); }
     if (j.practice) acceptPractice(j.practice);
     if (j.people) { q.pc = j.pc; setPeople((p) => ({ ...p, ...j.people })); }
-    setData({ me: j.me, classroom: j.classroom, watching: j.watching, mode: j.mode, games: j.games, game: j.game, session: j.session, tables: j.tables, gameOver: j.gameOver });
+    setData({ me: j.me, intro: j.intro, classroom: j.classroom, watching: j.watching, mode: j.mode, games: j.games, game: j.game, session: j.session, tables: j.tables, gameOver: j.gameOver });
   }, [cls, game, acceptDisc, acceptPractice]);
 
   useEffect(() => {
@@ -98,7 +99,7 @@ export function useWatch(cls: string, game: string | null) {
     const res = r.result;
     if (res && Array.isArray(res.questions)) acceptDisc(res);
     else if (res && Array.isArray(res.groups)) { v.current.gv = res.v; setGroups(res); }
-    else if (res && res.group && "set" in res) acceptPractice(res);
+    else if (res && res.group && "moments" in res) acceptPractice(res);
     poll().catch(() => {});
     return res;
   }, [cls, acceptDisc, acceptPractice, poll]);
