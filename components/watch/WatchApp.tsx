@@ -49,7 +49,10 @@ function Centered({ title, text, children }: { title: string; text?: string; chi
 
 export function WatchApp({ cls }: { cls: string }) {
   const router = useRouter();
-  const [game, setGame] = useState<string | null>(null);
+  // the table being watched survives a reload (per classroom, this browser only); the server re-validates it
+  const gameKey = `mt.watchGame.${cls}`;
+  const [game, setGameState] = useState<string | null>(() => { try { return typeof window === "undefined" ? null : localStorage.getItem(gameKey); } catch { return null; } });
+  const setGame = useCallback((g: string | null) => { setGameState(g); try { if (g) localStorage.setItem(gameKey, g); else localStorage.removeItem(gameKey); } catch {} }, [gameKey]);
   const w = useWatch(cls, game);
   const { data, view, feed, disc, groups, practice, people, stale, fatal, act } = w;
   const [persp, setPersp] = useState<string | null>(null);
@@ -282,7 +285,7 @@ export function WatchApp({ cls }: { cls: string }) {
       {stale && <div className="shrink-0 mx-auto mb-2 rounded-full bg-[#FEF3C7] text-[#7A4B00] dark:bg-[#3a2e0b] dark:text-[#FCD34D] px-4 py-1.5 t-sub" role="status">Connection interrupted. Reconnecting… The view may be out of date.</div>}
       <main className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto px-4 pb-4">
         {!data ? <Centered title="Joining the classroom…" />
-          : showPractice ? <PracticeRoom group={g!} practice={practice} people={people} me={data.me.id} act={act} onBack={() => setScreen("auto")} />
+          : showPractice ? <PracticeRoom group={g!} practice={practice} people={people} me={data.me.id} act={act} onBack={() => setScreen("auto")} cls={cls} game={data.game} />
           : showSummary ? <Summary disc={disc} groups={groups} people={people} me={data.me.id} act={act} openPractice={() => setScreen("practice")} gameOver={!!data.gameOver}
               backToTable={() => { setSticky(false); setScreen("table"); }} liveAgain={mode === "live"} />
           : mode === "select" && !game ? (

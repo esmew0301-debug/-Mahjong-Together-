@@ -89,6 +89,11 @@ export interface Group {
 export interface Groups { v: number; computedAt: number | null; groups: Group[]; assign: Record<string, string>; basis?: string } // assign: spectator → accepted group
 
 export interface PracticeMsg { id: string; sid: string; kind: "text" | "emoji"; text: string; ts: number }
-export interface Practice { v: number; group: string; idx: number; stage: "answer" | "reveal"; answers: Record<string, string>; chat: PracticeMsg[]; round: number }
+/** One learner's own progress through the group's five questions (independent of everyone else). */
+export interface LearnerProgress { idx: number; answers: Record<string, string>; done: boolean; decision?: "yes" | "no" }
+/** "Play a Game Together": one opt-in attempt of a learning group → one fresh Mahjong room. */
+export interface GameAttempt { id: string; startedAt: number; deadline: number; members: string[]; declined: string[]; room?: string; formedAt?: number;
+  creds?: Record<string, { pid: string; token: string }> /* SERVER-ONLY: stripped before sending */ }
+export interface Practice { v: number; group: string; set: string[]; users: Record<string, LearnerProgress>; chat: PracticeMsg[]; games: GameAttempt[] }
 
 export interface GameSummary { code: string; name: string; status: string; players: { name: string; avatar?: string; kind?: string }[]; hand: number | null; teaching: boolean; featured: boolean; classroom?: string; createdAt: number }

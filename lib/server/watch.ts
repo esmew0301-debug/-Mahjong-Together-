@@ -1,16 +1,18 @@
 import "server-only";
 import crypto from "crypto";
 import { kv } from "./kv";
-import { HttpError, authPid, classRoomsKey, cleanName, cookieName, getRoom, presenceMap, uid, cleanAvatar } from "./room";
+import { HttpError, authPid, classRoomsKey, cleanName, cookieName, createMatchedRoom, getRoom, presenceMap, roomKey, uid, cleanAvatar } from "./room";
 import { validClassCode } from "./match";
 import { INVALID_CLASSROOM } from "../classroom";
 import { loadSnap, snapshotOf } from "./feed";
 import { displayName } from "../names";
 import type { Room } from "../types";
-import type { Discussion, GameSummary, Group, Groups, Practice, QRef, Question, Session, SpecView, Viewer } from "../watch/types";
+import type { Discussion, GameAttempt, GameSummary, Group, Groups, LearnerProgress, Practice, QRef, Question, Session, SpecView, Viewer } from "../watch/types";
 import { classify } from "../watch/topics";
 import { recommendGroups } from "../watch/groups";
-import { SCENARIOS, scenarioOrder } from "../watch/scenarios";
+import { PRACTICE_LENGTH, practiceSet, scenarioById } from "../watch/scenarios";
+import { CLASSROOM_CODE } from "../classroom";
+import { CLASS_WINDOW_MS } from "./match";
 
 /**
  * Mahjong Together 4.0 — Spectator Mode (server). Fully automatic (no host): every room matched in the classroom is a
@@ -190,7 +192,9 @@ export async function watchState(c: string, me: SpecRec, p: WatchParams, readCoo
   const myGroupId = groups?.assign[me.id];
   let practice: unknown = undefined;
   if (myGroupId) {
-    const pr = await readDoc<Practice>(pracKey(myGroupId));
+    let pr = await readDoc<Practice>(pracKey(myGroupId));
+    const grp = groups?.groups.find((x) => x.id === myGroupId);
+    if (pr && grp && (!Array.isArray(pr.set) || !pr.users || !pr.games)) pr = (await casDoc<Practice, void>(pracKey(grp.id), () => newPractice(grp), (d) => normPractice(d, grp))).doc; // old shared-index doc
     if (pr && pr.v !== p.pv) practice = redactPractice(pr, me.id);
   }
   return {
@@ -218,7 +222,7 @@ export async function snapshotFor(c: string, game: string, seq: number, readCook
 }
 
 // ---------------------------------------------------------------- discussion
-const ACTS = ["ask", "reply", "same", "group-accept", "group-decline", "general-join", "group-leave", "prac-answer", "prac-reveal", "prac-next", "prac-chat", "prac-emoji"];
+const ACTS = ["ask", "reply", "same", "group-accept", "group-decline", "general-join", "group-leave", "prac-answer", "prac-next", "prac-decide", "prac-chat", "prac-emoji"];
 const lastPost = new Map<string, number>(); // best-effort per-instance spam guard; the document check below is authoritative
 function liveSession(room: Room) {
   const s = sessionOf(room);
@@ -309,32 +313,41 @@ async function groupAct(s: Session, me: SpecRec, type: string, a: Record<string,
       if (d.assign[me.id] === g.id) delete d.assign[me.id];
       return null;
     });
-    if (out) await casDoc<Practice, void>(pracKey(out), () => ({ v: 0, group: out, idx: 0, stage: "answer", answers: {}, chat: [], round: 1 }), () => {});
+    const joined = out ? doc.groups.find((x) => x.id === out) : null;
+    if (joined) await casDoc<Practice, void>(pracKey(joined.id), () => newPractice(joined), (pr) => normPractice(pr, joined));
     return doc;
   }
-  // practice actions: only accepted members of the viewer's own group
-  const groups = await readDoc<Groups>(groupsKey(s.id));
-  const gid = groups?.assign[me.id];
-  const g = groups?.groups.find((x) => x.id === gid);
-  if (!g || g.status[me.id] !== "accepted") throw new HttpError(403, "Join a learning group to practice together.");
-  const members = acceptedOf(g);
-  const order = scenarioOrder(g.topics);
-  const { doc } = await casDoc<Practice, void>(pracKey(g.id), () => ({ v: 0, group: g.id, idx: 0, stage: "answer", answers: {}, chat: [], round: 1 }), (pr) => {
-    const sc = SCENARIOS[order[pr.idx % order.length]];
+  // practice actions: only accepted members of the viewer's own group; progress is PER LEARNER
+  const g = await myGroup(s, me);
+  const { doc } = await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g), (pr) => {
+    normPractice(pr, g);
+    const u: LearnerProgress = (pr.users[me.id] ||= { idx: 0, answers: {}, done: false });
+    const cur = pr.set[u.idx];
     if (type === "prac-answer") {
-      if (pr.stage !== "answer") return;
+      if (u.done || String(a.qid) !== cur || u.answers[cur]) return; // stale / repeated submit: the first answer stands
+      const sc = scenarioById(cur)!;
       const choice = String(a.choice);
       if (!sc.options.some((o) => o.id === choice)) throw new HttpError(400, "Choose one of the answers.");
-      if (pr.answers[me.id]) return; // first answer stands
-      pr.answers[me.id] = choice;
-      if (members.every((m) => pr.answers[m])) pr.stage = "reveal";
-    } else if (type === "prac-reveal") {
-      if (!pr.answers[me.id]) throw new HttpError(409, "Choose your answer first.");
-      pr.stage = "reveal";
+      u.answers[cur] = choice;
     } else if (type === "prac-next") {
-      if (pr.stage !== "reveal") return;
-      if (Number(a.round) !== pr.round) return; // a second tap for the same round never skips a scenario
-      pr.idx += 1; pr.stage = "answer"; pr.answers = {}; pr.round += 1;
+      if (u.done || String(a.qid) !== cur || !u.answers[cur]) return; // a double tap never skips a question
+      if (u.idx < PRACTICE_LENGTH - 1) u.idx += 1;
+      else u.done = true;
+    } else if (type === "prac-decide") {
+      if (!u.done) throw new HttpError(409, "Finish the five questions first.");
+      const choice = a.choice === "yes" ? "yes" : "no";
+      const waiting = pr.games.find((x) => !x.room);
+      if (choice === "no") {
+        u.decision = "no";
+        if (waiting) { waiting.members = waiting.members.filter((m) => m !== me.id); if (!waiting.declined.includes(me.id)) waiting.declined.push(me.id); }
+        return;
+      }
+      u.decision = "yes";
+      if (pr.games.some((x) => x.members.includes(me.id) && (!x.room || Date.now() - (x.formedAt || 0) < 30 * 60_000))) return; // already in one
+      if (waiting && waiting.members.length < 4) { waiting.members.push(me.id); waiting.declined = waiting.declined.filter((m) => m !== me.id); return; }
+      // first interested learner (or a late one after the previous game started): a fresh attempt → a fresh room
+      pr.games.push({ id: `pg-${uid()}`, startedAt: Date.now(), deadline: Date.now() + CLASS_WINDOW_MS, members: [me.id], declined: [] });
+      pr.games = pr.games.slice(-6);
     } else if (type === "prac-chat" || type === "prac-emoji") {
       const text = type === "prac-emoji" ? String(a.text) : cleanText(a.text, 200);
       if (type === "prac-emoji" && !["👍", "❤️", "😂", "👏", "🤔", "🎉"].includes(text)) throw new HttpError(400, "Unknown reaction");
@@ -347,9 +360,72 @@ async function groupAct(s: Session, me: SpecRec, type: string, a: Record<string,
   return redactPractice(doc, me.id);
 }
 
-/** Before the reveal, nobody sees other learners' choices — only that they have answered. */
+async function myGroup(s: Session, me: SpecRec) {
+  const groups = await readDoc<Groups>(groupsKey(s.id));
+  const g = groups?.groups.find((x) => x.id === groups?.assign[me.id]);
+  if (!g || g.status[me.id] !== "accepted") throw new HttpError(403, "Join a learning group to practice together.");
+  return g;
+}
+const newPractice = (g: Group): Practice => ({ v: 0, group: g.id, set: practiceSet(g.topics), users: {}, chat: [], games: [] });
+/** Migrate an older shared-index document (one group-wide counter cycling through 4 scenarios) to per-learner progress. */
+function normPractice(pr: Practice, g: Group) {
+  const old = pr as unknown as Record<string, unknown>;
+  if (!Array.isArray(pr.set) || pr.set.length !== PRACTICE_LENGTH) { pr.set = practiceSet(g.topics); pr.users = {}; }
+  for (const k of ["idx", "stage", "answers", "round"]) delete old[k];
+  pr.users ||= {}; pr.chat ||= []; pr.games ||= [];
+}
+
+/** Other learners' answers are never sent; the server-only room credentials are always stripped. */
 export function redactPractice(pr: Practice, me: string) {
-  return pr.stage === "reveal" ? { ...pr, answered: Object.keys(pr.answers) } : { ...pr, answers: pr.answers[me] ? { [me]: pr.answers[me] } : {}, answered: Object.keys(pr.answers) };
+  const users = Object.fromEntries(Object.entries(pr.users || {}).map(([sid, u]) => [sid, sid === me ? u : { idx: u.idx, answers: {}, done: u.done, decision: u.decision }]));
+  return { ...pr, users, games: (pr.games || []).map(({ creds: _c, ...g }) => g) };
+}
+
+/** Is this waiting attempt ready to become a room? Four willing humans, everyone else decided, or the 25 s window ended. */
+function due(att: GameAttempt, pr: Practice, g: Group, now: number) {
+  const inOther = new Set(pr.games.filter((x) => x.id !== att.id).flatMap((x) => x.members));
+  const others = acceptedOf(g).filter((m) => !att.members.includes(m) && !inOther.has(m));
+  return att.members.length >= 4 || others.every((m) => pr.users[m]?.decision === "no") || now >= att.deadline;
+}
+
+/**
+ * "Play a Game Together" — poll the learner's pending game. When it is due, ONE fresh Mahjong room is created for
+ * exactly the willing members of THIS learning group (empty seats → the existing simulated players). The room is
+ * written first (unique code), then claimed atomically in the group's document; a lost race deletes the spare room.
+ */
+export async function gameStatus(c: string, me: SpecRec, a: Record<string, unknown>, readCookie: (n: string) => string | undefined) {
+  let game = String(a.game || "");
+  if (!game) { const live = await classGames(c, true); if (live.length) game = live[0].code; }
+  const watched = await teachingRoom(c, game);
+  const g = await myGroup(sessionOf(watched), me);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const pr = await readDoc<Practice>(pracKey(g.id));
+    if (!pr || !Array.isArray(pr.games)) return { status: "none" as const };
+    const att = pr.games.find((x) => x.members.includes(me.id) && (!x.room || Date.now() - (x.formedAt || 0) < 30 * 60_000));
+    const people = await specMap(c);
+    const view = (x: GameAttempt) => ({ id: x.id, members: x.members.map((m) => ({ id: m, name: people[m]?.name || "Learner", avatar: people[m]?.avatar || "smile" })), deadlineInMs: Math.max(0, x.deadline - Date.now()), room: x.room });
+    if (!att) return { status: "none" as const };
+    if (att.room) return { status: "formed" as const, attempt: view(att), room: att.room, cred: att.creds?.[me.id] };
+    if (!due(att, pr, g, Date.now())) return { status: "waiting" as const, attempt: view(att) };
+    // form the room for exactly these willing learners
+    const members = [...att.members];
+    const { room, creds } = await createMatchedRoom(members.map((m) => ({ name: people[m]?.name || "Learner", avatar: people[m]?.avatar })), CLASSROOM_CODE);
+    let won = false;
+    try {
+      await casDoc<Practice, void>(pracKey(g.id), () => newPractice(g), (d) => {
+        won = false;
+        const cur = d.games.find((x) => x.id === att.id);
+        if (!cur || cur.room || cur.members.join() !== members.join()) return; // someone else formed it, or membership changed
+        cur.room = room.code; cur.formedAt = Date.now();
+        cur.creds = Object.fromEntries(members.map((m, i) => [m, creds[i]]));
+        won = true;
+      });
+    } catch { /* busy: retry */ }
+    if (!won) { await kv.del(roomKey(room.code)); continue; }
+  }
+  const pr = await readDoc<Practice>(pracKey(g.id));
+  const att = pr?.games.find((x) => x.members.includes(me.id) && x.room);
+  return att ? { status: "formed" as const, room: att.room, cred: att.creds?.[me.id] } : { status: "waiting" as const };
 }
 
 // ---------------------------------------------------------------- automatic learning groups

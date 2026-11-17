@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/client";
 import type { Discussion, GameSummary, Groups, Practice, Session, SpecEvent, SpecView, Viewer } from "@/lib/watch/types";
 
-export type PracticeView = Practice & { answered: string[] };
+export type PracticeView = Practice;
 export interface WatchData {
   me: Viewer;
   classroom: string;
@@ -98,7 +98,7 @@ export function useWatch(cls: string, game: string | null) {
     const res = r.result;
     if (res && Array.isArray(res.questions)) acceptDisc(res);
     else if (res && Array.isArray(res.groups)) { v.current.gv = res.v; setGroups(res); }
-    else if (res && res.group && "stage" in res) acceptPractice(res);
+    else if (res && res.group && "set" in res) acceptPractice(res);
     poll().catch(() => {});
     return res;
   }, [cls, acceptDisc, acceptPractice, poll]);
