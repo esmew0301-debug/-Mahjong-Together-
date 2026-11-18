@@ -24,7 +24,7 @@ function JoinClassroom() {
           const p = getProfile();
           if (!p) { router.replace("/profile?next=watch"); return; }
           const j = await api<{ classroom: string }>("/api/watch/join", { code: c, name: p.name, avatar: p.avatar });
-          try { localStorage.setItem("mt.watchCode", j.classroom); } catch {}
+          try { localStorage.setItem("mt.watchCode", j.classroom); localStorage.removeItem(`mt.watchGame.${j.classroom}`); } catch {} // a new visit never pins an old table
           router.push(`/watch/${encodeURIComponent(j.classroom)}`);
         }} />
     </DeskPage>

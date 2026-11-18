@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Crown, Flag, ListOrdered, Lock, Plus, Trash2 } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Crown, Flag, ListOrdered, Plus, Trash2 } from "lucide-react";
 import type { GameEvent, MsgAction, PublicRoom } from "@/lib/types";
 import { variantById } from "@/lib/variants";
 import { MANUAL_NOTE, profileFor, type Transfer } from "@/lib/scoring";
@@ -76,7 +76,7 @@ function TransferList({ r, transfers, status }: { r: PublicRoom; transfers: Tran
 }
 
 // ---------- Game bar (playing) ----------
-export function GameBar({ r, me, act, busy, openRecord, openScores, reviewRules, openCoach }: { r: PublicRoom; me: string; act: Act; busy: boolean; openRecord: () => void; openScores: () => void; reviewRules: () => void; openCoach: () => void }) {
+export function GameBar({ r, me, act, busy, openRecord, openScores, reviewRules }: { r: PublicRoom; me: string; act: Act; busy: boolean; openRecord: () => void; openScores: () => void; reviewRules: () => void }) {
   const [open, setOpen] = useState(false);
   const [finishBlock, setFinishBlock] = useState(false);
   const { totals } = useScores(r);
@@ -88,7 +88,6 @@ export function GameBar({ r, me, act, busy, openRecord, openScores, reviewRules,
     { label: "Record Event", icon: <ClipboardList size={20} strokeWidth={1.75} />, onClick: openRecord },
     { label: "View Scores", icon: <ListOrdered size={20} strokeWidth={1.75} />, onClick: openScores },
     { label: "Review Rules", icon: <BookOpen size={20} strokeWidth={1.75} />, onClick: reviewRules },
-    { label: "My Private Coach", icon: <Lock size={20} strokeWidth={1.75} />, onClick: openCoach },
     ...(isHost ? [{ label: "Finish Session", icon: <Flag size={20} strokeWidth={1.75} />, onClick: () => (pending.length ? setFinishBlock(true) : act({ type: "finish-request" })) }] : []),
   ];
   return (

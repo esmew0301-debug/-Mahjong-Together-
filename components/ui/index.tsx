@@ -373,26 +373,33 @@ export function Count({ n, label }: { n: number; label: string }) {
  * (within ~100px) or when they sent the message themselves; otherwise an unread count is shown.
  * Card/image resizes stick to the bottom only if the reader was already there. Never jumps on polling.
  */
-export function useChatScroll(messages: { id: string; sender: string }[], me: string, contentRef: React.RefObject<HTMLElement | null>) {
+/** `scrollRef`: scroll this element (e.g. the floating Private Coach panel) instead of the page. */
+export function useChatScroll(messages: { id: string; sender: string }[], me: string, contentRef: React.RefObject<HTMLElement | null>, scrollRef?: React.RefObject<HTMLElement | null>) {
   const near = useRef(true);
   const lastId = useRef<string | null>(null);
   const [unread, setUnread] = useState(0);
-  const atBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100;
+  const atBottom = () => {
+    const el = scrollRef?.current;
+    return el ? el.scrollTop + el.clientHeight >= el.scrollHeight - 100 : window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100;
+  };
   const toBottom = (smooth: boolean) => {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    const el = scrollRef?.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   };
   useEffect(() => {
     const onScroll = () => {
       near.current = atBottom();
       if (near.current) setUnread(0);
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
+    const target: HTMLElement | Window = scrollRef?.current || window;
+    target.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
     return () => {
-      window.removeEventListener("scroll", onScroll);
+      target.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const latest = messages[messages.length - 1]?.id ?? null;
   useEffect(() => {
     if (lastId.current === null) {

@@ -14,6 +14,7 @@ import { T } from "@/lib/watch/scenarios";
 import { Btn, cx } from "@/components/ui";
 import { RefChip, VAvatar } from "./Discussion";
 import { SpecTable, WTile } from "./SpecTable";
+import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
 import type { PracticeView } from "./useWatch";
 
 const NUM = ["zero", "one", "two", "three"];
@@ -139,7 +140,7 @@ export function Summary({ disc, groups, people, me, act, openPractice, backToTab
                   <Btn onClick={openPractice}><Sparkles size={18} /> Open Discussion Group</Btn>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
-                    <Btn disabled={busy} onClick={() => run({ type: "group-accept", gid: g.id }, openPractice)}>Join Discussion Group</Btn>
+                    <InteractiveHoverButton disabled={busy} onClick={() => run({ type: "group-accept", gid: g.id }, openPractice)}>Join Discussion Group</InteractiveHoverButton>
                     <Btn variant="secondary" className="bg-card" disabled={busy} onClick={() => run({ type: "group-decline", gid: g.id })}>Maybe Later</Btn>
                   </div>
                 )}
@@ -337,7 +338,7 @@ export function PracticeRoom({ group, practice, people, me, act, onBack, cls, ga
         <h1 className="text-[32px] leading-[40px] font-semibold text-green-text">{n === 4 ? "You've Explored All 4 Game Moments!" : "You've Completed the Group Discussion!"}</h1>
         <p className="text-[18px] leading-[28px] text-muted max-w-[560px]">{n ? "Great work! You've explored real Mahjong moves together. Ready to try a game?" : "Your group's questions weren't tied to specific recorded moves, so there were no game moments to revisit. Ready to try a game?"}</p>
         <div className="grid grid-cols-2 gap-4 mt-5 w-full max-w-[560px]">
-          <Btn className="min-h-14 text-[17px]" disabled={busy} onClick={() => run({ type: "prac-decide", choice: "yes" })}><Users size={18} /> Play a Game Together</Btn>
+          <InteractiveHoverButton className="min-h-14 text-[17px]" disabled={busy} onClick={() => run({ type: "prac-decide", choice: "yes" })} icon={<Users size={18} />}>Play a Game Together</InteractiveHoverButton>
           <Btn variant="secondary" className="min-h-14 text-[17px] bg-card" disabled={busy} onClick={goHome}><Home size={18} /> Back to Home</Btn>
         </div>
       </div>

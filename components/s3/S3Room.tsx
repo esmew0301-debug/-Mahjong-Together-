@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { Check, ChevronLeft, CircleHelp, MessageCircleQuestion, Share2, QrCode } from "lucide-react";
+import { Check, ChevronLeft, CircleHelp, Share2, QrCode } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import type { useRoom } from "@/lib/client";
 import type { GameEvent, PublicPlayer, PublicRoom } from "@/lib/types";
 import { winCalc } from "@/lib/scoring/sichuan";
 import type { WinClaim } from "@/lib/scoring";
 import { entryById } from "@/lib/mahjong/intent-matcher";
-import { Btn, Header, IconBtn, Prose, Sheet, cx } from "@/components/ui";
+import { Btn, Header, Prose, Sheet, cx } from "@/components/ui";
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { ArtVisual } from "@/components/tutorial/ArtVisual";
 import { DIR_TEXT, tileArt } from "@/lib/tutorial/sichuan-art";
@@ -19,6 +19,7 @@ import { gentleConfetti, markKey, seenKey, smallConfetti } from "@/lib/celebrate
 import { FourPlayerStatus } from "./FourPlayerStatus";
 import { Quiz } from "./Quiz";
 import { MjTable } from "./MjTable";
+import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
 import { WaitingProgressRing } from "@/components/ui/loader-15";
 
 type Actions = ReturnType<typeof useRoom>;
@@ -70,13 +71,13 @@ export function S3Room({ data, actions, openCoach }: { data: NonNullable<Actions
     return () => window.clearTimeout(t);
   }, [held, reduce]);
   const r = held || live;
-  if (r.status === "lobby") return <Lobby r={r} me={me} actions={actions} openCoach={openCoach} />;
+  if (r.status === "lobby") return <Lobby r={r} me={me} actions={actions} />;
   if (r.status === "setup") return <Prep r={r} me={me} actions={actions} />;
   return <GameHome r={r} me={me} actions={actions} openCoach={openCoach} conn={actions.conn} />;
 }
 
 // ----------------------------------------------------------------------------------------- lobby
-function Lobby({ r, me, actions, openCoach }: { r: PublicRoom; me: string; actions: Actions; openCoach: () => void }) {
+function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions }) {
   const [learn, setLearn] = useState<string | null>(null);
   const router = useRouter();
   const { act, busy, error } = useAct(actions);
@@ -106,7 +107,7 @@ function Lobby({ r, me, actions, openCoach }: { r: PublicRoom; me: string; actio
     <div className="min-h-[100dvh] flex flex-col">
       <Header title="" onBack={() => router.push("/")} />
       <main className="flex-1 w-full max-w-[1200px] mx-auto px-6 py-8 grid grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)] gap-6 items-start">
-        <section className="rounded-[24px] border border-line bg-card shadow-card p-8 flex flex-col gap-7">
+        <section className="rounded-[24px] border bg-card lift p-8 flex flex-col gap-7">
           <div className="flex items-end gap-4">
             <div className="flex-1">
               <h1 className="text-[30px] leading-[38px] font-semibold text-green-text">Your Table</h1>
@@ -128,9 +129,9 @@ function Lobby({ r, me, actions, openCoach }: { r: PublicRoom; me: string; actio
               {anyAI && <p className="t-sub text-muted">This demo includes simulated participants.</p>}
               {error && <p className={ERR} role="alert">{error}</p>}
             </div>
-            <Btn className="min-w-[220px]" variant={mine ? "ok" : "primary"} disabled={busy || mine} onClick={() => act({ type: "lobby-ready" })}>
+            <InteractiveHoverButton className="min-w-[220px]" tone={mine ? "ok" : "primary"} disabled={busy || mine} onClick={() => act({ type: "lobby-ready" })}>
               {mine ? <><Check size={16} /> Ready</> : "Start Playing"}
-            </Btn>
+            </InteractiveHoverButton>
           </div>
         </section>
         <aside className="flex flex-col gap-4">
@@ -153,7 +154,6 @@ function Lobby({ r, me, actions, openCoach }: { r: PublicRoom; me: string; actio
               <li>The tiles are dealt; you exchange three tiles of one suit.</li>
               <li>Choose your missing suit, then draw and discard in turn.</li>
             </ol>
-            <button onClick={openCoach} className="self-start t-sub font-medium text-green-text min-h-11 hover:underline">Questions? Open your Private Coach.</button>
           </section>
         </aside>
       </main>
@@ -504,8 +504,7 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Confetti ref={confettiRef} manualstart globalOptions={confettiOpts} className="pointer-events-none fixed inset-0 z-30 w-full h-full" aria-hidden />
-      <Header title="Your Table" titleClassName="text-green-text" subtitle={`Sichuan Mahjong${r.players.some(isAI) ? " · Demo AI seats" : ""}`} onBack={() => router.push("/")}
-        right={<IconBtn label="Private Assistant" onClick={openCoach}><MessageCircleQuestion size={20} strokeWidth={1.75} /></IconBtn>}>
+      <Header title="Your Table" titleClassName="text-green-text" subtitle={`Sichuan Mahjong${r.players.some(isAI) ? " · Demo AI seats" : ""}`} onBack={() => router.push("/")}>
         {conn === "retrying" && <div className="px-4 py-1.5 t-meta text-muted border-t border-line">Reconnecting…</div>}
       </Header>
       <main className="flex-1 w-full max-w-[1000px] mx-auto px-6 py-10 flex flex-col gap-6">
@@ -518,7 +517,6 @@ function GameHome({ r, me, actions, openCoach, conn }: { r: PublicRoom; me: stri
               <Btn className="min-w-[240px]" disabled={busy || startReady} onClick={() => act({ type: "mj-start" })}>{startReady ? "Waiting for everyone…" : "Start Playing"}</Btn>
               <FourPlayerStatus players={r.players} me={me} doneLabel="Ready" state={(p) => (r.playReady?.[p.id] ? "done" : "waiting")} />
             </div>
-            <button onClick={openCoach} className="t-sub text-muted mt-2 min-h-11 underline-offset-4 hover:underline">Need help? Open your Private Assistant.</button>
           </div>
         )}
         {(r.status === "hand_review") && (

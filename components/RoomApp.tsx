@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { BookOpen, Camera, Check, ChevronRight, Copy, Flag, HelpCircle, ImagePlus, ListChecks, Lock, MoreHorizontal, Sparkles, Users, X } from "lucide-react";
@@ -9,6 +9,7 @@ import type { GameEvent, Msg, MsgAction, PublicPlayer, PublicRoom } from "@/lib/
 import { EndProposalPanel, EventCard, FinalResults, GameBar, HandReviewPanel, ReconcilePanel, RecordEventSheet, ScoresSheet, SessionReviewPanel, describeEvent, topicForEvent } from "./Game";
 import { CheckMyHand } from "./CheckMyHand";
 import { S3Room } from "./s3/S3Room";
+import { PrivateCoachLauncher } from "./ui/PrivateCoachLauncher";
 import { topicsForBrowse } from "@/lib/mahjong/assistant";
 import { entryById } from "@/lib/mahjong/intent-matcher";
 import { VARIANTS, breakInstruction, fill, stepById, variantById, visibleSteps, type Step, type Variant } from "@/lib/variants";
@@ -45,7 +46,11 @@ function useBusy() {
 export function RoomApp({ code }: { code: string }) {
   const router = useRouter();
   const room = useRoom(code);
-  const [view, setView] = useState<"table" | "coach">("table");
+  // Private Coach chat: opened only from the draggable AI orb (plus in-context links that open the same panel).
+  const [coachOpen, setCoachOpenRaw] = useState(false);
+  const [coachSeen, setCoachSeen] = useState(false); // mount the chat on first open, then keep it (state persists)
+  const setCoachOpen = useCallback((v: boolean) => { if (v) setCoachSeen(true); setCoachOpenRaw(v); }, []);
+  const openCoach = useCallback(() => setCoachOpen(true), [setCoachOpen]);
   useEffect(() => {
     if (room.notMember) router.replace(`/join/${code}`);
   }, [room.notMember, code, router]);
@@ -73,13 +78,26 @@ export function RoomApp({ code }: { code: string }) {
     // Final Sichuan product flow. The Private AI Assistant (Coach) is reused exactly as before.
     if (r.status === "complete") return <FinalResults r={r} me={me} onHome={() => { forgetRoom(r.code); router.push("/"); }} reflection={null}
       playAgain={{ mine: !!r.again?.[me], agreed: r.players.filter((p) => r.again?.[p.id]).length, onClick: () => { room.act({ type: "play-again" }).catch(() => {}); } }} />;
-    if (view === "coach") return <div className="coach-classic"><Coach r={r} me={me} onBack={() => setView("table")} act={room.act} /></div>;
-    return <S3Room data={room.data} actions={room} openCoach={() => setView("coach")} />;
+    // the orb replaces the screens' old chat openers; the setup (prep) screen never had one, so it gets no orb
+    return (<>
+      <S3Room data={room.data} actions={room} openCoach={openCoach} />
+      {r.status !== "setup" && coachLauncher()}
+    </>);
   }
   if (r.status === "lobby") return <Lobby r={r} me={me} actions={room} />;
   if (r.status === "complete") return <Complete r={r} me={me} actions={room} />;
-  if (view === "coach") return <Coach r={r} me={me} onBack={() => setView("table")} act={room.act} />;
-  return <Table data={room.data} actions={room} openCoach={() => setView("coach")} />;
+  return (<>
+    <Table data={room.data} actions={room} />
+    {coachLauncher()}
+  </>);
+
+  function coachLauncher() {
+    return (
+      <PrivateCoachLauncher open={coachOpen} setOpen={setCoachOpen} title="My Private Coach" subtitle="Only you can see this conversation.">
+        {coachSeen && <Coach r={r} me={me} onBack={() => setCoachOpen(false)} act={room.act} floating />}
+      </PrivateCoachLauncher>
+    );
+  }
 }
 
 // ---------------- lobby ----------------
@@ -184,7 +202,7 @@ function Lobby({ r, me, actions }: { r: PublicRoom; me: string; actions: Actions
 }
 
 // ---------------- table ----------------
-function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]>; actions: Actions; openCoach: () => void }) {
+function Table({ data, actions }: { data: NonNullable<Actions["data"]>; actions: Actions }) {
   const router = useRouter();
   const { room: r, me } = data;
   const [detail, setDetail] = useState<Detail>(null);
@@ -274,7 +292,7 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
           onExplain={(ev) => { const t = topicForEvent(r, ev); if (t) onAction({ label: "", type: "followup", topicId: t, facet: "short" }); else setDetail({ title: describeEvent(r, ev).title, body: ev.lines.join("\n"), source: ev.source }); }}
           onCorrect={(ev) => { setRevise(ev); setRecordOpen(true); }} />
       ))}
-      {r.status === "playing" && <GameBar r={r} me={me} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} openScores={() => setScoresOpen(true)} reviewRules={reviewRules} openCoach={openCoach} />}
+      {r.status === "playing" && <GameBar r={r} me={me} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} openScores={() => setScoresOpen(true)} reviewRules={reviewRules} />}
       {r.status === "hand_review" && r.hand && <HandReviewPanel r={r} me={me} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} openScores={() => setScoresOpen(true)} />}
       {r.status === "reconciling" && <ReconcilePanel r={r} act={act} busy={busy} openRecord={() => { setRevise(null); setRecordOpen(true); }} />}
       {r.status === "session_review" && r.finalReview && <SessionReviewPanel r={r} me={me} act={act} busy={busy} />}
@@ -291,7 +309,6 @@ function Table({ data, actions, openCoach }: { data: NonNullable<Actions["data"]
         onBack={() => router.push("/")}
         right={
           <>
-            <IconBtn label="My Private Coach" onClick={openCoach}><Lock size={19} strokeWidth={1.75} /></IconBtn>
             <IconBtn label="Menu" onClick={() => setMenu(true)}>
               <span className="relative"><MoreHorizontal size={20} strokeWidth={1.75} />{online < r.players.length && <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-dash ring-2 ring-bg" aria-label="A player is offline" />}</span>
             </IconBtn>
@@ -664,7 +681,8 @@ function compress(file: File): Promise<string> {
   });
 }
 
-function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () => void; act: Actions["act"] }) {
+/** The Private Coach chat. `floating`: rendered inside the orb's floating panel (no page header, own scroll). */
+function Coach({ r, me, onBack, act, floating = false }: { r: PublicRoom; me: string; onBack: () => void; act: Actions["act"]; floating?: boolean }) {
   const [checkOpen, setCheckOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[] | null>(null);
   const [image, setImage] = useState<string | null>(null);
@@ -682,7 +700,8 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
     api(`/api/rooms/${r.code}/private`).then((j) => setMsgs(j.messages)).catch((e) => setErr(e.message));
   }, [r.code]);
   const coachMain = useRef<HTMLElement>(null);
-  const coachScroll = useChatScroll(msgs || [], me, coachMain);
+  const coachScrollBox = useRef<HTMLDivElement>(null);
+  const coachScroll = useChatScroll(msgs || [], me, coachMain, floating ? coachScrollBox : undefined);
 
   const post = async (body: Record<string, unknown>, optimisticText: string, photo = false) => {
     setThinking(true);
@@ -730,17 +749,18 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
   );
 
   return (
-    <div className="min-h-[100dvh] flex flex-col">
-      <Header title="My Private Coach" subtitle="Only you can see this conversation." onBack={onBack} backLabel="Back to Shared Table"
+    <div className={floating ? "flex-1 min-h-0 flex flex-col" : "min-h-[100dvh] flex flex-col"} data-private-coach>
+      {!floating && <Header title="My Private Coach" subtitle="Only you can see this conversation." onBack={onBack} backLabel="Back to Shared Table"
         titleClassName="text-green-text"
-        backClassName="pl-2 pr-3 bg-sage text-green-text hover:bg-[color-mix(in_srgb,var(--sage),var(--brand)_14%)] active:bg-[color-mix(in_srgb,var(--sage),var(--brand)_22%)] active:scale-[0.98]" />
+        backClassName="pl-2 pr-3 bg-sage text-green-text hover:bg-[color-mix(in_srgb,var(--sage),var(--brand)_14%)] active:bg-[color-mix(in_srgb,var(--sage),var(--brand)_22%)] active:scale-[0.98]" />}
       {r.endProposal && (
         <div className="px-4 py-2 bg-surface border-b border-line flex items-center gap-3" role="status">
           <span className="flex-1 t-sub">End Game requested — vote on the Shared Table.</span>
           <Btn variant="secondary" className="min-h-10 px-3" onClick={onBack}>Go Vote</Btn>
         </div>
       )}
-      <main ref={coachMain} className="flex-1 w-full max-w-[860px] mx-auto px-6 py-8 flex flex-col gap-6">
+      <div ref={coachScrollBox} className={floating ? "flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col" : "contents"}>
+      <main ref={coachMain} className={floating ? "flex-1 w-full px-4 py-4 flex flex-col gap-4" : "flex-1 w-full max-w-[860px] mx-auto px-6 py-8 flex flex-col gap-6"}>
         <div className="flex flex-col gap-2">
           <div className="t-section">Ask privately</div>
           <Prose text={`I'm your private Rule Assistant. Ask about ${variant ? variant.name : "Mahjong"} rules or general strategy without sharing it with the table. I can't see your tiles, so describe them in text if you want help thinking a decision through.`} />
@@ -753,7 +773,7 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
       </main>
       <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
-      <div className="sticky bottom-0 z-10 w-full max-w-[860px] mx-auto">
+      <div className={floating ? "sticky bottom-0 z-10 w-full" : "sticky bottom-0 z-10 w-full max-w-[860px] mx-auto"}>
       <Composer
         inputRef={inputRef}
         placeholder="Ask your private coach..."
@@ -775,6 +795,7 @@ function Coach({ r, me, onBack, act }: { r: PublicRoom; me: string; onBack: () =
           </div>
         ) : null}
       />
+      </div>
       </div>
       <Sheet open={!!detail} onClose={() => setDetail(null)} title={detail?.title || "Details"}>
         {detail && (<><Prose text={detail.detail || detail.text} />{detail.source && <p className="t-meta text-muted mt-4 pt-3 border-t border-line">Source: {detail.source}</p>}</>)}

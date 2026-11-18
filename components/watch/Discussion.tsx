@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Lightbulb, MessageSquare, Send, X } from "lucide-react";
+import { Check, MessageSquare, Send, X } from "lucide-react";
 import type { Discussion as Disc, QRef, Question, SpecSnap, Viewer } from "@/lib/watch/types";
 import { classify } from "@/lib/watch/topics";
 import { COACH_STARTERS, coachAnswer } from "@/lib/watch/coach";
+import { PrivateCoachLauncher } from "@/components/ui/PrivateCoachLauncher";
 import { tileName } from "@/lib/mj/rules";
 import { Btn, cx } from "@/components/ui";
 import { EMOJI_FONT, avatarOf, emojiFor } from "@/components/s3/avatar";
@@ -192,7 +193,6 @@ export function DiscussionPanel({ disc, people, me, act, selRef, clearRef, onRef
     <section className="relative h-full min-h-0 flex flex-col rounded-[22px] border border-line bg-card shadow-card overflow-hidden" aria-label="Live Discussion" data-discussion>
       <div className="px-4 pt-3 pb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line">
         <div className="flex-1 min-w-[190px]"><h2 className="t-page">Live Discussion</h2><p className="t-sub text-muted">Ask, learn, and explore together.</p></div>
-        <Btn variant="secondary" className="min-h-11 px-3 bg-card shrink-0" onClick={() => setCoachOpen(true)}><Lightbulb size={18} /> Ask Private Coach</Btn>
       </div>
       <div className="px-3 py-2 flex gap-1.5 flex-wrap border-b border-line" role="tablist" aria-label="Filter questions">
         {([["all", "All"], ...(selRef ? [["move", "This Move"]] : []), ["shared", "Most Shared"], ["mine", "Mine"]] as [typeof filter, string][]).map(([k, l]) => (
@@ -239,13 +239,11 @@ export function DiscussionPanel({ disc, people, me, act, selRef, clearRef, onRef
         </form>
       )}
 
-      {coachOpen && (
-        <div className="absolute inset-0 z-30 bg-card flex flex-col mt-pop" role="dialog" aria-label="Private Coach" data-coach>
-          <div className="px-4 pt-3 pb-2 flex items-start gap-2 border-b border-line">
-            <div className="flex-1"><h2 className="t-page flex items-center gap-2"><Lightbulb size={18} className="text-green-text" /> Private Coach</h2>
-              <p className="t-sub text-muted">Only you can see this. Free rule-based answers{coachRef ? " about the selected move" : ""}.</p></div>
-            <button onClick={() => setCoachOpen(false)} aria-label="Close Private Coach" className="h-11 w-11 -mr-2 rounded-full flex items-center justify-center hover:bg-hover"><X size={20} /></button>
-          </div>
+      {/* The draggable AI orb is this screen's only Coach chat opener (it replaces the old "Ask Private Coach" button).
+          It renders into <body> at the viewport's bottom-right; the chat below is the same Coach, unchanged. */}
+      <PrivateCoachLauncher open={coachOpen} setOpen={setCoachOpen} title="Private Coach" avoid="[data-composer]"
+        subtitle={`Only you can see this. Free rule-based answers${coachRef ? " about the selected move" : ""}.`}>
+        <div className="flex-1 min-h-0 flex flex-col" data-coach>
           {coachRef && <div className="px-3 pt-2"><RefChip r={coachRef} compact /></div>}
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-3">
             {!coach.length && <p className="t-body text-muted">Ask about a rule or the selected move. Try one of these:</p>}
@@ -268,7 +266,7 @@ export function DiscussionPanel({ disc, people, me, act, selRef, clearRef, onRef
             <Btn type="submit" className="min-h-12" disabled={!cq.trim()}>Ask</Btn>
           </form>
         </div>
-      )}
+      </PrivateCoachLauncher>
     </section>
   );
 }

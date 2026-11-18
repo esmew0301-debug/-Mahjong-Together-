@@ -13,5 +13,5 @@ export function DeskPage({ onBack, backLabel = "Back", title = "", right, childr
 }
 /** A comfortably sized desktop card. */
 export function DeskCard({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <section className={cx("w-full rounded-[24px] border border-line bg-card shadow-card p-10", className)}>{children}</section>;
+  return <section className={cx("w-full rounded-[24px] border bg-card lift p-10", className)}>{children}</section>;
 }

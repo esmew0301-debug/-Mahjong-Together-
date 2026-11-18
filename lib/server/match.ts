@@ -158,11 +158,8 @@ export async function enqueue(qn: QueueName, cookie: string | undefined, rawName
   const c = QUEUES[qn];
   const name = cleanName(rawName);
   if (!name) throw new HttpError(400, "Enter a name to continue.");
-  const existing = authEntry(await load(c), cookie);
-  if (existing?.room) {
-    const room = await getRoom(existing.room);
-    if (room && room.status !== "complete") return { cookie: null as string | null }; // already seated: resume that room
-  }
+  // An explicit join is ALWAYS a fresh search: a previous match (active or finished) is never handed back here.
+  // Only an entry that is still waiting is kept (a refresh mid-wait keeps its place and the shared deadline).
   const secret = crypto.randomBytes(18).toString("base64url");
   const id = uid();
   const fresh = await update(c, (q) => {
@@ -170,7 +167,7 @@ export async function enqueue(qn: QueueName, cookie: string | undefined, rawName
     prune(c, q, now);
     const mine = authEntry(q, cookie);
     if (mine && !mine.room) { mine.seen = now; mine.name = name; mine.avatar = cleanAvatar(rawAvatar); return false; } // keeps `at`
-    if (mine?.room) q.entries = q.entries.filter((x) => x.id !== mine.id); // finished game: start a new search
+    if (mine?.room) q.entries = q.entries.filter((x) => x.id !== mine.id); // matched before: drop it and start a new search
     q.entries.push({ id, sh: sha(secret), name, avatar: cleanAvatar(rawAvatar), at: now, seen: now });
     return true;
   });

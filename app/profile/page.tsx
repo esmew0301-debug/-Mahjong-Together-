@@ -6,6 +6,7 @@ import { getProfile, saveProfile } from "@/lib/client";
 import { Check } from "lucide-react";
 import { Btn, cx } from "@/components/ui";
 import { DeskCard, DeskPage } from "@/components/ui/desk";
+import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
 import { AVATAR_OPTIONS, EMOJI_FONT, avatarOf } from "@/components/s3/avatar";
 
 /** Create Profile (players and spectators): name + emoji avatar. Desktop two-column card. */
@@ -51,7 +52,7 @@ function ProfileForm() {
             </label>
             {err && <p className="t-sub text-[#B42318] dark:text-[#FF6961] -mt-3" role="alert">{err}</p>}
             <div className="flex-1" />
-            <Btn type="submit" className="self-start min-w-[200px]">Continue</Btn>
+            <InteractiveHoverButton type="submit" className="self-start min-w-[200px]">Continue</InteractiveHoverButton>
           </div>
           <fieldset className="flex flex-col gap-3">
             <legend className="t-sub font-medium mb-3">Choose an Emoji Avatar</legend>

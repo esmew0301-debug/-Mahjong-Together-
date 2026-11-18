@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CircleHelp, Flag, History, Lightbulb, MessageCircle, Moon, MoreHorizontal, Smile, Sun, X } from "lucide-react";
+import { CircleHelp, Flag, History, Lightbulb, MessageCircle, Moon, MoreHorizontal, Smile, Sun, X } from "lucide-react";
 import type { PublicPlayer, PublicRoom, SocialItem } from "@/lib/types";
 import { Btn, Sheet, cx } from "@/components/ui";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -299,7 +299,6 @@ export function MjTable({ r, me, act, busy, error, openCoach, onEnd, overlays }:
                 {coach && <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-green-strong border-2 border-green-soft" aria-hidden />}
               </button>
             </div>
-            <button onClick={openCoach} aria-label="Rule Questions" title="Rule Questions" className={iconBtn}><BookOpen size={19} /></button>
             <button onClick={onEnd} aria-label="End Game" title="End Game" className={cx(iconBtn, "hidden min-[375px]:flex")}><Flag size={19} /></button>
             <span className="hidden min-[375px]:flex lg:flex"><ThemeToggle /></span>
             <div className="relative min-[375px]:hidden">

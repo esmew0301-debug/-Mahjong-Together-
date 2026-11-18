@@ -8,6 +8,7 @@ import { T } from "@/lib/watch/scenarios";
 import { Btn, cx } from "@/components/ui";
 import { EMOJI_FONT } from "@/components/s3/avatar";
 import { WTile } from "./SpecTable";
+import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
 
 const tiles = (s: string) => { const seen: Record<string, number> = {}; return s.split(" ").map((k) => T(k, (seen[k] = (seen[k] ?? -1) + 1))); };
 const Row = ({ ids, w = 40, cls }: { ids: number[]; w?: number; cls?: (i: number) => string | undefined }) => (
@@ -130,7 +131,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
               {i === 3 && <ul className="grid grid-cols-1 gap-1">{RULES.spectatorDo.map((d) => <li key={d} className="t-sub inline-flex items-center gap-2"><Check size={14} className="text-green-text" />{d}</li>)}</ul>}
               <div className="flex gap-3 mt-2">
                 {i > 0 && <Btn variant="secondary" className="bg-card" onClick={() => setI(i - 1)}><ArrowLeft size={16} /> Back</Btn>}
-                <Btn className="min-w-[160px]" onClick={() => setI(i + 1)}>Next <ArrowRight size={16} /></Btn>
+                <InteractiveHoverButton className="min-w-[160px]" onClick={() => setI(i + 1)}>Next</InteractiveHoverButton>
               </div>
             </div>
           </div>
@@ -157,7 +158,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
               <p className="t-body">You&apos;ll see a real game with every hand visible. Click any move to ask about it. The <b>?</b> button opens the full guide anytime.</p>
               <div className="flex gap-3">
                 <Btn variant="secondary" className="bg-card" onClick={() => setI(i - 1)}><ArrowLeft size={16} /> Back</Btn>
-                <Btn className="min-w-[260px]" onClick={onDone}><Check size={18} /> I Understand — Start Watching</Btn>
+                <InteractiveHoverButton className="min-w-[300px]" onClick={onDone} icon={<Check size={18} />}>I Understand — Start Watching</InteractiveHoverButton>
               </div>
             </section>
           </div>

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { api, getProfile, lastRoom, rememberRoom } from "@/lib/client";
+import { api, getProfile, rememberRoom } from "@/lib/client";
 import type { PublicPlayer } from "@/lib/types";
 import { Btn } from "@/components/ui";
 import { DeskCard, DeskPage } from "@/components/ui/desk";
@@ -33,16 +33,8 @@ function Match() {
   const queue = sp.get("queue") === "class" ? "class" : "default";
   const code = queue === "class" ? (sp.get("code") || "") : "";
   const qs = queue === "class" ? `?queue=class${code ? `&code=${encodeURIComponent(code)}` : ""}` : "";
-  // Scanning the classroom QR again while already seated at an active table: offer to resume instead of re-queueing.
-  const [resume, setResume] = useState<string | null | undefined>(queue === "class" ? undefined : null);
   // Countdown from the SERVER's remaining time (resynced on every poll; display only).
   const [left, setLeft] = useState<number | null>(null);
-  useEffect(() => {
-    if (queue !== "class") return;
-    const code = lastRoom();
-    if (!code) { setResume(null); return; }
-    api(`/api/rooms/${code}`).then((j) => setResume(j.member && j.room && j.room.status !== "complete" ? j.room.code : null)).catch(() => setResume(null));
-  }, [queue]);
   const [s, setS] = useState<S>({ status: "none", filled: 1 });
   const [players, setPlayers] = useState<PublicPlayer[]>([]);
   const [complete, setComplete] = useState(false);
@@ -54,7 +46,6 @@ function Match() {
   useEffect(() => {
     const p = getProfile();
     if (!p) { router.replace(`/profile?next=match${queue === "class" ? `&queue=class${code ? `&code=${encodeURIComponent(code)}` : ""}` : ""}`); return; }
-    if (resume !== null) return; // waiting for the resume check / the player's choice
     stop.current = false;
     let timer: ReturnType<typeof setTimeout>;
     const handle = (j: S) => {
@@ -91,7 +82,7 @@ function Match() {
       .then((j) => { if (!handle(j)) timer = setTimeout(tick, 1000); })
       .catch((e) => { setErr((e as Error).message); timer = setTimeout(tick, 1500); });
     return () => { stop.current = true; clearTimeout(timer); };
-  }, [router, queue, qs, code, resume]);
+  }, [router, queue, qs, code]);
 
   useEffect(() => {
     if (s.status !== "waiting" || typeof s.deadlineInMs !== "number") { setLeft(null); return; }
@@ -114,18 +105,6 @@ function Match() {
   };
 
   const n = complete ? 4 : Math.max(1, Math.min(4, s.filled || players.length || 1));
-  if (resume) return (
-    <DeskPage onBack={() => router.push("/")}>
-      <DeskCard className="max-w-[600px] text-center flex flex-col items-center gap-3">
-        <h1 className="text-[28px] leading-[36px] font-semibold text-green-text">You&apos;re Already at a Table</h1>
-        <p className="t-body text-muted">Room {resume}. Resume it, or find a new table.</p>
-        <div className="flex gap-3 mt-3">
-          <Btn className="min-w-[200px]" onClick={() => router.replace(`/room/${resume}`)}>Resume Your Table</Btn>
-          <Btn variant="secondary" className="min-w-[200px] bg-card" onClick={() => setResume(null)}>Find a New Table</Btn>
-        </div>
-      </DeskCard>
-    </DeskPage>
-  );
   return (
     <DeskPage onBack={cancel}>
       <DeskCard className="max-w-[860px] flex flex-col items-center gap-7 text-center">
